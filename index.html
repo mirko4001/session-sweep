@@ -1,0 +1,1936 @@
+<!DOCTYPE html>
+<html lang="de" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Session-Sweep-System v2.1 — Backtest & Trading Journal</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        zinc: {
+                            950: '#09090b',
+                            900: '#121215',
+                            850: '#18181c',
+                            800: '#27272a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #09090b;
+            color: #f4f4f5;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #121215;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #27272a;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3f3f46;
+        }
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white">
+
+    <!-- Top Notification Toast -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 hidden transform transition-all duration-300 bg-zinc-900 border border-zinc-700 text-zinc-100 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3">
+        <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-400" id="toast-icon"></i>
+        <span id="toast-msg" class="text-sm font-medium">Gespeichert</span>
+    </div>
+
+    <!-- Confirmation Modal (Instead of alert/confirm) -->
+    <div id="confirm-modal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <div class="flex items-center gap-3 mb-3 text-amber-400">
+                <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+                <h3 id="modal-title" class="text-lg font-semibold text-white">Aktion bestätigen</h3>
+            </div>
+            <p id="modal-desc" class="text-sm text-zinc-400 mb-6">Möchtest du diese Aktion wirklich durchführen?</p>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeModal()" class="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium transition">Abbrechen</button>
+                <button id="modal-confirm-btn" class="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-sm font-medium transition">Bestätigen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur sticky top-0 z-40">
+        <div class="max-w-[1600px] mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-mono font-bold text-lg">
+                    S2
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="font-semibold text-base sm:text-lg tracking-tight text-white">Session-Sweep-System</h1>
+                        <span class="text-[11px] font-mono uppercase px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">v2.1 Pro</span>
+                    </div>
+                    <p class="text-xs text-zinc-400 hidden sm:block">EUR/USD & GBP/CAD • 15M Sweep + 5M Body Close • Europe/Vienna</p>
+                </div>
+            </div>
+
+            <!-- Navigation Tabs -->
+            <nav class="flex items-center gap-1 bg-zinc-900 p-1 rounded-xl border border-zinc-800/80 overflow-x-auto max-w-full">
+                <button onclick="switchTab('dashboard')" id="tab-btn-dashboard" class="tab-btn px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition flex items-center gap-2 bg-zinc-800 text-white shadow-sm">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4 text-indigo-400"></i>
+                    <span>Dashboard & Varianten</span>
+                </button>
+                <button onclick="switchTab('logger')" id="tab-btn-logger" class="tab-btn px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition flex items-center gap-2 text-zinc-400 hover:text-zinc-200">
+                    <i data-lucide="list-plus" class="w-4 h-4"></i>
+                    <span>Trade- & Session-Log</span>
+                </button>
+                <button onclick="switchTab('atr')" id="tab-btn-atr" class="tab-btn px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition flex items-center gap-2 text-zinc-400 hover:text-zinc-200">
+                    <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+                    <span>ATR-Kalibrierung</span>
+                </button>
+                <button onclick="switchTab('rules')" id="tab-btn-rules" class="tab-btn px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition flex items-center gap-2 text-zinc-400 hover:text-zinc-200">
+                    <i data-lucide="check-square" class="w-4 h-4"></i>
+                    <span>Checkliste & Regeln</span>
+                </button>
+            </nav>
+
+            <!-- Data Backup Actions -->
+            <div class="flex items-center gap-2">
+                <button onclick="exportJSON()" title="Backup als JSON speichern" class="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-medium flex items-center gap-1.5 transition">
+                    <i data-lucide="download" class="w-3.5 h-3.5 text-indigo-400"></i>
+                    <span class="hidden md:inline">JSON Backup</span>
+                </button>
+                <label class="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-medium flex items-center gap-1.5 transition cursor-pointer" title="JSON Backup laden">
+                    <i data-lucide="upload" class="w-3.5 h-3.5 text-emerald-400"></i>
+                    <span class="hidden md:inline">Import</span>
+                    <input type="file" id="json-import-input" accept=".json" class="hidden" onchange="importJSON(event)">
+                </label>
+                <button onclick="exportCSV()" title="Logs als CSV für Excel exportieren" class="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-medium flex items-center gap-1.5 transition">
+                    <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 text-amber-400"></i>
+                    <span class="hidden md:inline">CSV</span>
+                </button>
+                <button onclick="confirmResetData()" title="Auf Startwerte zurücksetzen" class="p-1.5 rounded-lg bg-zinc-900 hover:bg-rose-950/50 border border-zinc-800 hover:border-rose-800 text-zinc-400 hover:text-rose-400 transition">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 py-6">
+
+        <!-- ==========================================
+             TAB 1: DASHBOARD & VARIANTEN-AUSWERTUNG
+        =========================================== -->
+        <section id="tab-dashboard" class="space-y-6">
+            <!-- Top Filter Bar & Quick Action -->
+            <div class="flex flex-wrap items-center justify-between gap-4 bg-zinc-900/70 border border-zinc-800/80 p-4 rounded-2xl">
+                <div class="flex items-center gap-3">
+                    <span class="text-xs font-medium uppercase tracking-wider text-zinc-400">Paar-Filter:</span>
+                    <div class="inline-flex rounded-xl bg-zinc-950 p-1 border border-zinc-800">
+                        <button onclick="setDashboardFilter('ALL')" id="filter-btn-ALL" class="dash-filter-btn px-3 py-1 rounded-lg text-xs font-medium bg-indigo-600 text-white transition">Gesamt</button>
+                        <button onclick="setDashboardFilter('EUR/USD')" id="filter-btn-EUR/USD" class="dash-filter-btn px-3 py-1 rounded-lg text-xs font-medium text-zinc-400 hover:text-white transition">EUR/USD</button>
+                        <button onclick="setDashboardFilter('GBP/CAD')" id="filter-btn-GBP/CAD" class="dash-filter-btn px-3 py-1 rounded-lg text-xs font-medium text-zinc-400 hover:text-white transition">GBP/CAD</button>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button onclick="switchTab('logger'); document.getElementById('form-date').focus();" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-medium flex items-center gap-2 shadow-lg shadow-indigo-600/20 transition">
+                        <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                        <span>Neue Session / Trade erfassen</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 8 KPI Cards -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+                <div class="bg-zinc-900 border border-zinc-800/80 p-4 rounded-2xl">
+                    <span class="text-xs text-zinc-400 block mb-1">Geloggte Sessions</span>
+                    <div id="kpi-sessions" class="text-2xl font-mono font-bold text-white">0</div>
+                    <span class="text-[11px] text-zinc-500">Total betrachtet</span>
+                </div>
+                <div class="bg-zinc-900 border border-zinc-800/80 p-4 rounded-2xl">
+                    <span class="text-xs text-zinc-400 block mb-1">Ausgeführte Trades</span>
+                    <div id="kpi-executed" class="text-2xl font-mono font-bold text-indigo-400">0</div>
+                    <span id="kpi-exec-rate" class="text-[11px] text-zinc-500">0% aller Sessions</span>
+                </div>
+                <div class="bg-zinc-900 border border-zinc-800/80 p-4 rounded-2xl">
+                    <span class="text-xs text-zinc-400 block mb-1">Echte Fill-Rate</span>
+                    <div id="kpi-fillrate" class="text-2xl font-mono font-bold text-sky-400">0%</div>
+                    <span id="kpi-unfilled-count" class="text-[11px] text-zinc-500">0 ungefüllte Limits</span>
+                </div>
+                <div class="bg-zinc-900 border border-zinc-800/80 p-4 rounded-2xl">
+                    <span class="text-xs text-zinc-400 block mb-1">Skips / Gefiltert</span>
+                    <div id="kpi-skips" class="text-2xl font-mono font-bold text-zinc-300">0</div>
+                    <span class="text-[11px] text-zinc-500">Kein Trade platziert</span>
+                </div>
+                <div class="bg-zinc-900 border border-zinc-800/80 p-4 rounded-2xl">
+                    <span class="text-xs text-zinc-400 block mb-1">Winrate (ohne BE)</span>
+                    <div id="kpi-winrate" class="text-2xl font-mono font-bold text-emerald-400">0.0%</div>
+                    <span id="kpi-wl-ratio" class="text-[11px] text-zinc-500">0W / 0L / 0BE</span>
+                </div>
+                <div class="bg-zinc-900 border border-zinc-800/80 p-4 rounded-2xl">
+                    <span class="text-xs text-zinc-400 block mb-1">Summe R (50% BE)</span>
+                    <div id="kpi-total-r" class="text-2xl font-mono font-bold text-emerald-400">+0.00 R</div>
+                    <span class="text-[11px] text-zinc-500">Kumuliertes Ergebnis</span>
+                </div>
+                <div class="bg-zinc-900 border border-zinc-800/80 p-4 rounded-2xl">
+                    <span class="text-xs text-zinc-400 block mb-1">Expectancy / Trade</span>
+                    <div id="kpi-expectancy" class="text-2xl font-mono font-bold text-emerald-400">+0.00 R</div>
+                    <span class="text-[11px] text-zinc-500">Ziel: &gt; +0.20 R</span>
+                </div>
+                <div class="bg-zinc-900 border border-zinc-800/80 p-4 rounded-2xl">
+                    <span class="text-xs text-zinc-400 block mb-1">Regelverstöße</span>
+                    <div id="kpi-violations" class="text-2xl font-mono font-bold text-emerald-400">0</div>
+                    <span class="text-[11px] text-zinc-500">Ziel: 0 Verstöße</span>
+                </div>
+            </div>
+
+            <!-- Go-Live Check & FTMO Risk Tracker Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Go-Live Check Panel (Abschnitt 6.4) -->
+                <div class="lg:col-span-7 bg-zinc-900 border border-zinc-800/80 rounded-2xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-2.5">
+                                <i data-lucide="shield-check" class="w-5 h-5 text-indigo-400"></i>
+                                <h2 class="text-base font-semibold text-white">Go-Live Freigabe-Check (Abschnitt 6.4)</h2>
+                            </div>
+                            <span id="golive-master-badge" class="px-3 py-1 rounded-full text-xs font-mono font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                IN TESTPHASE
+                            </span>
+                        </div>
+
+                        <div class="space-y-4">
+                            <!-- Criterion 1: 100 Setups -->
+                            <div class="bg-zinc-950/70 border border-zinc-800/80 p-3.5 rounded-xl">
+                                <div class="flex justify-between items-center mb-1.5">
+                                    <span class="text-xs font-medium text-zinc-300">1. Stichprobengröße (mind. 100 ausgeführte Trades)</span>
+                                    <span id="golive-c1-text" class="text-xs font-mono text-amber-400">2 / 100 Trades</span>
+                                </div>
+                                <div class="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
+                                    <div id="golive-c1-bar" class="h-full bg-indigo-500 transition-all duration-500" style="width: 2%"></div>
+                                </div>
+                            </div>
+
+                            <!-- Criterion 2: Expectancy > +0.20R -->
+                            <div class="bg-zinc-950/70 border border-zinc-800/80 p-3.5 rounded-xl flex items-center justify-between">
+                                <div>
+                                    <span class="text-xs font-medium text-zinc-300 block">2. Erwartungswert &gt; +0,20 R pro Trade nach Spread</span>
+                                    <span class="text-[11px] text-zinc-500">Statistischer Edge über alle ausgeführten Setups</span>
+                                </div>
+                                <span id="golive-c2-badge" class="px-2.5 py-1 rounded-lg text-xs font-mono font-medium">Prüfe...</span>
+                            </div>
+
+                            <!-- Criterion 3: 0 Violations in last 20 trades -->
+                            <div class="bg-zinc-950/70 border border-zinc-800/80 p-3.5 rounded-xl flex items-center justify-between">
+                                <div>
+                                    <span class="text-xs font-medium text-zinc-300 block">3. Disziplin: 0 Regelverstöße in den letzten 20 Trades</span>
+                                    <span class="text-[11px] text-zinc-500">Ausführungstreue vor Echtgeld-Einsatz</span>
+                                </div>
+                                <span id="golive-c3-badge" class="px-2.5 py-1 rounded-lg text-xs font-mono font-medium">Prüfe...</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-zinc-500 mt-4 pt-3 border-t border-zinc-800/60">
+                        <strong class="text-zinc-400">Goldene Regel:</strong> Parameter nur nach einem abgeschlossenen 100-Trades-Block ändern, niemals mitten in einer Verlustserie.
+                    </p>
+                </div>
+
+                <!-- FTMO 200k Recovery & Risiko-Tracker (Abschnitt 2) -->
+                <div class="lg:col-span-5 bg-zinc-900 border border-zinc-800/80 rounded-2xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-2.5">
+                                <i data-lucide="gauge" class="w-5 h-5 text-emerald-400"></i>
+                                <h2 class="text-base font-semibold text-white">FTMO Risiko- & Recovery-Tracker</h2>
+                            </div>
+                            <span class="text-xs font-mono text-zinc-400">Abschnitt 2</span>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3 mb-4">
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Initial Balance ($)</label>
+                                <input type="number" id="ftmo-initial" value="200000" step="1000" onchange="updateFTMOTracker()" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-indigo-500">
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Aktuelle Equity ($)</label>
+                                <input type="number" id="ftmo-equity" value="192000" step="100" onchange="updateFTMOTracker()" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-indigo-500">
+                            </div>
+                        </div>
+
+                        <!-- Dynamic Output Box -->
+                        <div class="bg-zinc-950 border border-zinc-800 rounded-xl p-4 space-y-3">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-zinc-400">Aktueller Stand (Drawdown):</span>
+                                <span id="ftmo-dd-pct" class="text-sm font-mono font-semibold text-rose-400">-4.00% (-8.000 $)</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-zinc-400">Letzte 3 Trades Verlustserie?</span>
+                                <span id="ftmo-streak-badge" class="text-xs font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300">Nein (0L in Folge)</span>
+                            </div>
+                            <div class="pt-2 border-t border-zinc-800/80 flex justify-between items-center">
+                                <div>
+                                    <span class="text-xs font-medium text-zinc-200 block">Erlaubtes Risiko nächste Session:</span>
+                                    <span id="ftmo-tier-reason" class="text-[11px] text-zinc-500">Equity unter -2% von Initial Balance</span>
+                                </div>
+                                <div class="text-right">
+                                    <span id="ftmo-allowed-risk" class="text-xl font-mono font-bold text-indigo-400">0.50%</span>
+                                    <span id="ftmo-allowed-usd" class="block text-[11px] font-mono text-zinc-400">960 $ / Trade</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 pt-3 border-t border-zinc-800/60 flex items-center justify-between text-[11px] text-zinc-400">
+                        <span>Tagesstopp: <strong class="text-rose-400 font-mono">-2.0%</strong></span>
+                        <span>Wochenstopp: <strong class="text-rose-400 font-mono">-3.0%</strong></span>
+                        <span>Max: <strong class="text-zinc-200 font-mono">1 Trade/Session</strong></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Varianten-Vergleich & Skip-Gründe -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Varianten-Matrix (Spalten Z, AA, AB + Bias + Sweep + Entry) -->
+                <div class="lg:col-span-8 bg-zinc-900 border border-zinc-800/80 rounded-2xl p-5">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-2.5">
+                            <i data-lucide="git-compare" class="w-5 h-5 text-indigo-400"></i>
+                            <h2 class="text-base font-semibold text-white">Systematischer Varianten-Vergleich (Abschnitt 6.3)</h2>
+                        </div>
+                        <span class="text-xs text-zinc-400">Echte Fließkomma-Auswertung</span>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="border-b border-zinc-800 text-[11px] font-mono uppercase text-zinc-400">
+                                    <th class="py-2.5 px-3">Kategorie / Variante</th>
+                                    <th class="py-2.5 px-3 text-right">Trades</th>
+                                    <th class="py-2.5 px-3 text-right">Winrate</th>
+                                    <th class="py-2.5 px-3 text-right">Summe R</th>
+                                    <th class="py-2.5 px-3 text-right">Expectancy (Ø R)</th>
+                                    <th class="py-2.5 px-3 text-right">Bewertung</th>
+                                </tr>
+                            </thead>
+                            <tbody id="variants-table-body" class="divide-y divide-zinc-800/60 text-xs sm:text-sm">
+                                <!-- Filled dynamically via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Skip- & Verfall-Gründe Analyse -->
+                <div class="lg:col-span-4 bg-zinc-900 border border-zinc-800/80 rounded-2xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-2.5">
+                                <i data-lucide="filter-x" class="w-5 h-5 text-amber-400"></i>
+                                <h2 class="text-base font-semibold text-white">Filter- & Skip-Analyse</h2>
+                            </div>
+                            <span class="text-xs text-zinc-400">Überfilterungs-Check</span>
+                        </div>
+                        <p class="text-xs text-zinc-400 mb-4">Zeigt, welche Regeln die meisten Sessions blockieren oder wo Limits ungefüllt verfallen:</p>
+                        
+                        <div id="skip-reasons-list" class="space-y-2.5">
+                            <!-- Dynamically populated -->
+                        </div>
+                    </div>
+
+                    <div class="mt-4 pt-3 border-t border-zinc-800/60 text-[11px] text-zinc-500">
+                        Tipp aus der Datenanalyse: Wenn ein einzelner Filter &gt;40% aller Setups schluckt, im nächsten Testblock dessen Sensitivität prüfen.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==========================================
+             TAB 2: SESSION- & TRADE-LOGGER
+        =========================================== -->
+        <section id="tab-logger" class="hidden space-y-6">
+            
+            <!-- Smart Entry Form -->
+            <div class="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-5 sm:p-6">
+                <div class="flex flex-wrap items-center justify-between gap-4 pb-4 mb-5 border-b border-zinc-800">
+                    <div class="flex items-center gap-2.5">
+                        <i data-lucide="file-plus-2" class="w-5 h-5 text-indigo-400"></i>
+                        <h2 id="form-title" class="text-base sm:text-lg font-semibold text-white">Session / Trade erfassen</h2>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span id="live-rule-summary-badge" class="px-3 py-1 rounded-full text-xs font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            Alle Regeln konform
+                        </span>
+                        <button type="button" onclick="resetTradeForm()" class="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs transition">
+                            Formular leeren
+                        </button>
+                    </div>
+                </div>
+
+                <form id="trade-form" onsubmit="saveTradeEntry(event)" class="space-y-6">
+                    <input type="hidden" id="form-edit-id" value="">
+
+                    <!-- Row 1: Basis & Session Status -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+                        <div>
+                            <label class="text-xs text-zinc-400 block mb-1">Datum</label>
+                            <input type="date" id="form-date" required class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+                        </div>
+                        <div>
+                            <label class="text-xs text-zinc-400 block mb-1">Paar</label>
+                            <select id="form-pair" onchange="validateLiveForm()" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+                                <option value="EUR/USD">EUR/USD</option>
+                                <option value="GBP/CAD">GBP/CAD</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-zinc-400 block mb-1">Session (Europe/Vienna)</label>
+                            <select id="form-session" onchange="validateLiveForm()" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+                                <option value="London (08-11)">London (08:00-11:00)</option>
+                                <option value="NY (14-17)">New York (14:00-17:00)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-zinc-400 block mb-1">Session-Status</label>
+                            <select id="form-status" onchange="validateLiveForm()" class="w-full bg-zinc-950 border border-indigo-500/50 rounded-xl px-3 py-2 text-sm font-medium text-white focus:outline-none focus:border-indigo-500">
+                                <option value="Geplant / Ausgeführt">Geplant / Ausgeführt</option>
+                                <option value="Limit nicht gefüllt">Limit nicht gefüllt</option>
+                                <option value="Übersprungen / Skip">Übersprungen / Skip</option>
+                            </select>
+                        </div>
+                        <div class="lg:col-span-2">
+                            <label class="text-xs text-zinc-400 block mb-1">Skip- oder Verfall-Grund (falls kein Trade)</label>
+                            <select id="form-skip-reason" onchange="validateLiveForm()" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+                                <option value="-">- (Kein Skip / Regulär ausgeführt)</option>
+                                <option value="Kein Alarm im Fenster">Kein Alarm im Handelsfenster</option>
+                                <option value="Range zu klein">Range zu klein (&lt;15p / &lt;23p oder &lt;% ATR)</option>
+                                <option value="Range zu groß">Range zu groß (&gt;50% bzw. &gt;80% ATR)</option>
+                                <option value="Range < 2.5x SL">Range kleiner als 2,5x SL</option>
+                                <option value="Gegen 1H-Bias">Setup gegen 1H-Bias</option>
+                                <option value="Sweep > 1x ATR(15M)">Sweep tiefer als 1x ATR(15M) (Breakout)</option>
+                                <option value="Sweep 2 Closes außen">2 Kerzenschlüsse außerhalb der Range</option>
+                                <option value="Keine 5M-Bestätigung">Keine 5M Body-Close Bestätigung im Fenster</option>
+                                <option value="RRR < 1.8">RRR unter 1,8 (auch nach FVG-Fallback)</option>
+                                <option value="Spread > 15% SL">Spread über 15% der SL-Distanz</option>
+                                <option value="80% TP vor Fill erreicht">Preis erreicht 80% TP vor Limit-Fill</option>
+                                <option value="Limit > 60 Min">Limit nach 60 Minuten nicht gefüllt</option>
+                                <option value="High-Impact News">High-Impact News Sperrzone (±15m)</option>
+                                <option value="Tages-/Wochenstopp">Tages-/Wochenstopp oder Session-Limit erreicht</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Row 2: Bias, Range & ATR (Live Validated) -->
+                    <div class="p-4 rounded-xl bg-zinc-950/60 border border-zinc-800/80 space-y-4">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-mono uppercase tracking-wider text-indigo-400">Schritt 1 & 2: Bias, Range-Filter & 15M-Sweep</span>
+                            <div id="validation-badges-row1" class="flex flex-wrap gap-2"></div>
+                        </div>
+
+                        <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">1H-Bias EMA 50</label>
+                                <select id="form-bias-ema" onchange="validateLiveForm()" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white">
+                                    <option value="Long">Long</option>
+                                    <option value="Short">Short</option>
+                                    <option value="Neutral">Neutral</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">1H-Bias Struktur</label>
+                                <select id="form-bias-struct" onchange="validateLiveForm()" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white">
+                                    <option value="Long">Long</option>
+                                    <option value="Short">Short</option>
+                                    <option value="Beides">Beides / Neutral</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Handelsrichtung</label>
+                                <select id="form-direction" onchange="validateLiveForm()" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-white">
+                                    <option value="Long">Long (Range-Tief)</option>
+                                    <option value="Short">Short (Range-Hoch)</option>
+                                    <option value="-">- (Kein Trade)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Daily ATR(14) Pips</label>
+                                <input type="number" step="0.1" id="form-daily-atr" value="60" oninput="validateLiveForm()" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white">
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Range-Größe Pips</label>
+                                <input type="number" step="0.1" id="form-range-pips" value="20" oninput="validateLiveForm()" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white">
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Range % vom ATR</label>
+                                <input type="text" id="form-range-atr-pct" readonly class="w-full bg-zinc-950 border border-zinc-800/60 rounded-lg px-2.5 py-1.5 text-xs font-mono text-zinc-300 cursor-not-allowed">
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">15M Sweep-Typ</label>
+                                <select id="form-sweep-type" onchange="validateLiveForm()" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white">
+                                    <option value="1-Kerzen-Sweep">1-Kerzen-Sweep</option>
+                                    <option value="2-Kerzen-Sweep">2-Kerzen-Sweep</option>
+                                    <option value="-">- (Kein Sweep)</option>
+                                </select>
+                            </div>
+                            <div class="grid grid-cols-2 gap-1.5">
+                                <div>
+                                    <label class="text-[10px] text-zinc-400 block mb-1" title="Sweep-Tiefe in Pips">Tiefe (P)</label>
+                                    <input type="number" step="0.1" id="form-sweep-depth" value="5" oninput="validateLiveForm()" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1.5 text-xs font-mono text-white">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] text-zinc-400 block mb-1" title="15M ATR(14) in Pips">15M ATR</label>
+                                    <input type="number" step="0.1" id="form-m15-atr" value="10" oninput="validateLiveForm()" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1.5 text-xs font-mono text-white">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Row 3: 5M Bestätigung, Entry, SL, Spread & RRR -->
+                    <div class="p-4 rounded-xl bg-zinc-950/60 border border-zinc-800/80 space-y-4">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-mono uppercase tracking-wider text-indigo-400">Schritt 3 & 4: 5M-Bestätigung, Limit-Entry, SL & Spread-Prüfung</span>
+                            <div id="validation-badges-row2" class="flex flex-wrap gap-2"></div>
+                        </div>
+
+                        <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">5M Body-Close (&ge;1p)</label>
+                                <select id="form-m5-confirm" onchange="validateLiveForm()" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white">
+                                    <option value="Ja">Ja (&ge; 1 Pip Body)</option>
+                                    <option value="Nein">Nein</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Limit Entry-Methode</label>
+                                <select id="form-entry-method" onchange="validateLiveForm()" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white">
+                                    <option value="50% Impuls">50% Impuls (Standard)</option>
+                                    <option value="FVG erstes Drittel">50% FVG (erstes Drittel)</option>
+                                    <option value="FVG ganz">50% FVG (ganze Strecke)</option>
+                                    <option value="-">-</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">SL inkl. Puffer (Pips)</label>
+                                <input type="number" step="0.1" id="form-sl-pips" value="8" oninput="validateLiveForm()" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white">
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Spread Entry (Pips)</label>
+                                <input type="number" step="0.1" id="form-spread-pips" value="0.8" oninput="validateLiveForm()" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white">
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Spread % vom SL</label>
+                                <input type="text" id="form-spread-pct" readonly class="w-full bg-zinc-950 border border-zinc-800/60 rounded-lg px-2.5 py-1.5 text-xs font-mono text-zinc-300 cursor-not-allowed">
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Range / SL Ratio</label>
+                                <input type="text" id="form-range-sl-ratio" readonly class="w-full bg-zinc-950 border border-zinc-800/60 rounded-lg px-2.5 py-1.5 text-xs font-mono text-zinc-300 cursor-not-allowed">
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Geplante RRR</label>
+                                <input type="number" step="0.05" id="form-rrr" value="2.0" oninput="validateLiveForm()" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white">
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Risiko-Stufe (%)</label>
+                                <input type="number" step="0.25" id="form-risk-pct" value="0.50" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-indigo-400">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Row 4: Ergebnis & Paralleles Varianten-Tracking -->
+                    <div id="result-section-box" class="p-4 rounded-xl bg-zinc-950/60 border border-zinc-800/80 space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <span class="text-xs font-mono uppercase tracking-wider text-emerald-400">Ergebnis & Paralleles Varianten-Tracking (Spalten X bis AB)</span>
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-[11px] text-zinc-500 mr-1">Schnellwahl:</span>
+                                <button type="button" onclick="setQuickR(-1.0, 'SL')" class="px-2 py-0.5 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-mono">-1.0R (SL)</button>
+                                <button type="button" onclick="setQuickR(0.0, 'BE')" class="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono">0.0R (BE)</button>
+                                <button type="button" onclick="setQuickR(1.8, 'TP')" class="px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-xs font-mono">+1.8R (TP)</button>
+                                <button type="button" onclick="setQuickRFromPlanned()" class="px-2 py-0.5 rounded bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 text-xs font-mono">= Geplante RRR</button>
+                                <button type="button" onclick="syncVariantsWithStandard()" class="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs">Auf alle BE-Varianten kopieren</button>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+                            <div>
+                                <label class="text-[11px] text-emerald-400 font-medium block mb-1">Ergebnis R (50% BE)</label>
+                                <input type="number" step="0.01" id="form-res-std" value="2.0" class="w-full bg-zinc-900 border border-emerald-500/40 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-white">
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Exit-Grund</label>
+                                <select id="form-exit-reason" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white">
+                                    <option value="TP">TP (Gegenseite Range)</option>
+                                    <option value="SL">SL</option>
+                                    <option value="BE">BE (Entry + Spread)</option>
+                                    <option value="85%-Regel">85%-Regel (Market Exit)</option>
+                                    <option value="Zeitstopp 13:30/18:30">Zeitstopp (13:30 / 18:30)</option>
+                                    <option value="-">-</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Ohne BE (R)</label>
+                                <input type="number" step="0.01" id="form-res-nobe" value="2.0" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white">
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Mit BE bei 40% (R)</label>
+                                <input type="number" step="0.01" id="form-res-be40" value="2.0" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white">
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Mit BE bei 1R (R)</label>
+                                <input type="number" step="0.01" id="form-res-be1r" value="2.0" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white">
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Regelverstoß?</label>
+                                <select id="form-violation" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white">
+                                    <option value="Nein">Nein (Sauber)</option>
+                                    <option value="Ja">Ja (Regelbruch!)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Chart-Link (TradingView)</label>
+                                <input type="url" id="form-screenshot" placeholder="https://www.tradingview.com/x/..." class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white">
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Notizen & Beobachtung</label>
+                                <input type="text" id="form-notes" placeholder="z.B. Sauberer Sweep..." class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-3">
+                        <button type="submit" class="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold flex items-center gap-2 shadow-lg shadow-indigo-600/25 transition">
+                            <i data-lucide="save" class="w-4 h-4"></i>
+                            <span id="form-submit-label">Session / Trade im Journal speichern</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Log Table & Search/Filter -->
+            <div class="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-5">
+                <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+                    <div class="flex items-center gap-2.5">
+                        <i data-lucide="table-2" class="w-5 h-5 text-indigo-400"></i>
+                        <h3 class="text-base font-semibold text-white">Vollständiges Session- & Trade-Logbuch</h3>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select id="log-filter-pair" onchange="renderTradeTable()" class="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-300">
+                            <option value="ALL">Alle Paare</option>
+                            <option value="EUR/USD">EUR/USD</option>
+                            <option value="GBP/CAD">GBP/CAD</option>
+                        </select>
+                        <select id="log-filter-status" onchange="renderTradeTable()" class="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-300">
+                            <option value="ALL">Alle Status</option>
+                            <option value="Geplant / Ausgeführt">Nur Ausgeführte Trades</option>
+                            <option value="Limit nicht gefüllt">Limit nicht gefüllt</option>
+                            <option value="Übersprungen / Skip">Übersprungen / Skip</option>
+                        </select>
+                        <input type="text" id="log-search" oninput="renderTradeTable()" placeholder="Suche in Notizen, Grund..." class="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white">
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse whitespace-nowrap">
+                        <thead>
+                            <tr class="border-b border-zinc-800 text-[11px] font-mono uppercase text-zinc-400 bg-zinc-950/50">
+                                <th class="py-2.5 px-2.5">#</th>
+                                <th class="py-2.5 px-2.5">Datum / Session</th>
+                                <th class="py-2.5 px-2.5">Paar</th>
+                                <th class="py-2.5 px-2.5">Status / Skip-Grund</th>
+                                <th class="py-2.5 px-2.5">Bias (EMA/Str)</th>
+                                <th class="py-2.5 px-2.5">Richtung</th>
+                                <th class="py-2.5 px-2.5">Range (%ATR)</th>
+                                <th class="py-2.5 px-2.5">Sweep (Tiefe)</th>
+                                <th class="py-2.5 px-2.5">Entry / SL / Spread%</th>
+                                <th class="py-2.5 px-2.5 text-right">Plan RRR</th>
+                                <th class="py-2.5 px-2.5 text-right">Ergebnis (50% BE)</th>
+                                <th class="py-2.5 px-2.5 text-right">Ohne BE / 40% / 1R</th>
+                                <th class="py-2.5 px-2.5">Verstoß</th>
+                                <th class="py-2.5 px-2.5 text-right">Aktion</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trade-log-tbody" class="divide-y divide-zinc-800/60 text-xs">
+                            <!-- Filled via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==========================================
+             TAB 3: ATR-KALIBRIERUNG (100 TAGE TOOL)
+        =========================================== -->
+        <section id="tab-atr" class="hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Left: Input & Table -->
+                <div class="lg:col-span-7 bg-zinc-900 border border-zinc-800/80 rounded-2xl p-5 space-y-5">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2.5">
+                            <i data-lucide="compass" class="w-5 h-5 text-indigo-400"></i>
+                            <div>
+                                <h2 class="text-base font-semibold text-white">ATR-Kalibrierung (100-Tage-Messung)</h2>
+                                <p class="text-xs text-zinc-400">Abschnitt 6.1: Empirische Prüfung der Asia- (15-50%) & London-Range (30-80%) Schwellen</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form onsubmit="addAtrEntry(event)" class="grid grid-cols-2 sm:grid-cols-6 gap-3 bg-zinc-950/70 p-3.5 rounded-xl border border-zinc-800">
+                        <div>
+                            <label class="text-[11px] text-zinc-400 block mb-1">Datum</label>
+                            <input type="date" id="atr-date" required class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white">
+                        </div>
+                        <div>
+                            <label class="text-[11px] text-zinc-400 block mb-1">Paar</label>
+                            <select id="atr-pair" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white">
+                                <option value="EUR/USD">EUR/USD</option>
+                                <option value="GBP/CAD">GBP/CAD</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[11px] text-zinc-400 block mb-1">Daily ATR(14)</label>
+                            <input type="number" step="0.1" id="atr-daily" value="60" required class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white">
+                        </div>
+                        <div>
+                            <label class="text-[11px] text-zinc-400 block mb-1">Asia (02-08)</label>
+                            <input type="number" step="0.1" id="atr-asia" value="18" required class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white">
+                        </div>
+                        <div>
+                            <label class="text-[11px] text-zinc-400 block mb-1">London (08-14)</label>
+                            <input type="number" step="0.1" id="atr-london" value="35" required class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white">
+                        </div>
+                        <div class="flex items-end">
+                            <button type="submit" class="w-full py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition">
+                                + Tag hinzufügen
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="overflow-x-auto max-h-[420px]">
+                        <table class="w-full text-left border-collapse">
+                            <thead class="sticky top-0 bg-zinc-900 border-b border-zinc-800 text-[11px] font-mono uppercase text-zinc-400">
+                                <tr>
+                                    <th class="py-2 px-3">Tag #</th>
+                                    <th class="py-2 px-3">Datum</th>
+                                    <th class="py-2 px-3">Paar</th>
+                                    <th class="py-2 px-3 text-right">Daily ATR</th>
+                                    <th class="py-2 px-3 text-right">Asia Pips (%ATR)</th>
+                                    <th class="py-2 px-3 text-right">London Pips (%ATR)</th>
+                                    <th class="py-2 px-3 text-right">Aktion</th>
+                                </tr>
+                            </thead>
+                            <tbody id="atr-table-body" class="divide-y divide-zinc-800/60 text-xs font-mono">
+                                <!-- Populated via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Right: Live Perzentil Auswertung -->
+                <div class="lg:col-span-5 bg-zinc-900 border border-zinc-800/80 rounded-2xl p-5 space-y-5">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2.5">
+                            <i data-lucide="sigma" class="w-5 h-5 text-emerald-400"></i>
+                            <h3 class="text-base font-semibold text-white">Statistische Verteilung & Perzentile</h3>
+                        </div>
+                        <select id="atr-stats-filter" onchange="renderAtrSection()" class="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-white">
+                            <option value="ALL">Alle Paare</option>
+                            <option value="EUR/USD">EUR/USD</option>
+                            <option value="GBP/CAD">GBP/CAD</option>
+                        </select>
+                    </div>
+
+                    <div class="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-4">
+                        <div class="flex justify-between items-center text-xs text-zinc-400">
+                            <span>Erfasste Handelstage:</span>
+                            <span id="atr-count-badge" class="font-mono font-semibold text-indigo-400">0 / 100 Tage</span>
+                        </div>
+
+                        <table class="w-full text-left border-collapse text-xs">
+                            <thead>
+                                <tr class="border-b border-zinc-800 text-zinc-400 font-mono">
+                                    <th class="py-2">Metrik</th>
+                                    <th class="py-2 text-right">Asia % vom ATR</th>
+                                    <th class="py-2 text-right">London % vom ATR</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-zinc-800/60 font-mono">
+                                <tr>
+                                    <td class="py-2.5 text-zinc-300 font-sans">Durchschnitt (Mean)</td>
+                                    <td id="atr-mean-asia" class="py-2.5 text-right text-white">0.0%</td>
+                                    <td id="atr-mean-london" class="py-2.5 text-right text-white">0.0%</td>
+                                </tr>
+                                <tr>
+                                    <td class="py-2.5 text-zinc-300 font-sans">15%-Perzentil (Untergrenze)</td>
+                                    <td id="atr-p15-asia" class="py-2.5 text-right text-emerald-400">0.0%</td>
+                                    <td id="atr-p15-london" class="py-2.5 text-right text-emerald-400">0.0%</td>
+                                </tr>
+                                <tr>
+                                    <td class="py-2.5 text-zinc-300 font-sans">50%-Perzentil (Median)</td>
+                                    <td id="atr-p50-asia" class="py-2.5 text-right text-indigo-400">0.0%</td>
+                                    <td id="atr-p50-london" class="py-2.5 text-right text-indigo-400">0.0%</td>
+                                </tr>
+                                <tr>
+                                    <td class="py-2.5 text-zinc-300 font-sans">80%-Perzentil (Obergrenze)</td>
+                                    <td id="atr-p80-asia" class="py-2.5 text-right text-amber-400">0.0%</td>
+                                    <td id="atr-p80-london" class="py-2.5 text-right text-amber-400">0.0%</td>
+                                </tr>
+                                <tr>
+                                    <td class="py-2.5 text-zinc-400 font-sans">Aktueller Regel-Startwert (PDF)</td>
+                                    <td class="py-2.5 text-right text-zinc-400">15% – 50%</td>
+                                    <td class="py-2.5 text-right text-zinc-400">30% – 80%</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="p-3.5 rounded-xl bg-indigo-500/5 border border-indigo-500/20 text-xs text-zinc-300 space-y-1.5">
+                        <div class="font-semibold text-indigo-300 flex items-center gap-1.5">
+                            <i data-lucide="info" class="w-4 h-4"></i>
+                            <span>Warum diese Kalibrierung?</span>
+                        </div>
+                        <p class="text-zinc-400 leading-relaxed">
+                            Nach 100 gemessenen Tagen kannst du die Startwerte aus Schritt 1.1 exakt auf das 15%- bis 80%-Perzentil deiner Zielpaare anpassen, damit du weder tote Ranges noch überdehnte Ausbrüche handelst.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==========================================
+             TAB 4: INTERAKTIVE CHECKLISTE & REGELWERK
+        =========================================== -->
+        <section id="tab-rules" class="hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Interactive Pre-Session Checklist -->
+                <div class="lg:col-span-7 bg-zinc-900 border border-zinc-800/80 rounded-2xl p-5 space-y-5">
+                    <div class="flex items-center justify-between border-b border-zinc-800 pb-4">
+                        <div class="flex items-center gap-2.5">
+                            <i data-lucide="check-check" class="w-5 h-5 text-emerald-400"></i>
+                            <div>
+                                <h2 class="text-base font-semibold text-white">Interaktiver Session-Assistent (Schritt 0 bis 4)</h2>
+                                <p class="text-xs text-zinc-400">Vor jedem Trade Punkt für Punkt durchgehen. Fehlt ein Haken = Skip!</p>
+                            </div>
+                        </div>
+                        <button onclick="resetChecklist()" class="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 transition">
+                            Alle Haken zurücksetzen
+                        </button>
+                    </div>
+
+                    <!-- DST Warning Banner (25.10. - 01.11.2026) -->
+                    <div class="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
+                        <i data-lucide="clock" class="w-5 h-5 text-amber-400 shrink-0 mt-0.5"></i>
+                        <div class="text-xs">
+                            <span class="font-semibold text-amber-300 block">Zeitumstellungs-Hinweis (Europe/Vienna):</span>
+                            <span class="text-zinc-300">Zwischen EU- und US-Umstellung (<strong>25.10. – 01.11.2026</strong>) öffnet New York 1 Stunde früher: Handelsfenster <strong>13:00–16:00 Uhr</strong>, London-Range 08:00–13:00 Uhr, NY-Zeitstopp 17:30 Uhr!</span>
+                        </div>
+                    </div>
+
+                    <div class="space-y-3" id="checklist-container">
+                        <!-- Step 0 -->
+                        <div class="p-3.5 rounded-xl bg-zinc-950/70 border border-zinc-800 space-y-2">
+                            <span class="text-xs font-mono uppercase text-indigo-400 font-semibold">Schritt 0: Vorbereitung (5 Min vor Fensterstart)</span>
+                            <label class="flex items-start gap-3 cursor-pointer text-xs sm:text-sm text-zinc-300 hover:text-white">
+                                <input type="checkbox" onchange="updateChecklistProgress()" class="chk-item mt-1 rounded bg-zinc-900 border-zinc-700 text-indigo-600 focus:ring-0">
+                                <span><strong>High-Impact-News</strong> für EUR, USD, GBP, CAD geprüft (Sperrzone: ±15 Min keine Entries / keine wartenden Limits).</span>
+                            </label>
+                            <label class="flex items-start gap-3 cursor-pointer text-xs sm:text-sm text-zinc-300 hover:text-white">
+                                <input type="checkbox" onchange="updateChecklistProgress()" class="chk-item mt-1 rounded bg-zinc-900 border-zinc-700 text-indigo-600 focus:ring-0">
+                                <span><strong>Vorsession-Range im 15M markiert:</strong> Für London die Asia-Range (02:00–08:00), für NY die London-Range (08:00–14:00) + Alarme auf Hoch & Tief.</span>
+                            </label>
+                        </div>
+
+                        <!-- Step 1 -->
+                        <div class="p-3.5 rounded-xl bg-zinc-950/70 border border-zinc-800 space-y-2">
+                            <span class="text-xs font-mono uppercase text-indigo-400 font-semibold">Schritt 1: Harte Vorfilter</span>
+                            <label class="flex items-start gap-3 cursor-pointer text-xs sm:text-sm text-zinc-300 hover:text-white">
+                                <input type="checkbox" onchange="updateChecklistProgress()" class="chk-item mt-1 rounded bg-zinc-900 border-zinc-700 text-indigo-600 focus:ring-0">
+                                <span><strong>Range-Größe passt:</strong> Asia 15–50% Daily ATR, London 30–80% Daily ATR. Mindestens <strong>15 Pips (EUR/USD)</strong> bzw. <strong>23 Pips (GBP/CAD)</strong>.</span>
+                            </label>
+                            <label class="flex items-start gap-3 cursor-pointer text-xs sm:text-sm text-zinc-300 hover:text-white">
+                                <input type="checkbox" onchange="updateChecklistProgress()" class="chk-item mt-1 rounded bg-zinc-900 border-zinc-700 text-indigo-600 focus:ring-0">
+                                <span><strong>Range-zu-SL & Bias:</strong> Range ist &ge; 2,5x geplanter SL. Richtung stimmt mit <strong>1H-Bias</strong> (EMA 50 Steigung vs. vor 5 Kerzen oder 1H-Struktur) überein.</span>
+                            </label>
+                        </div>
+
+                        <!-- Step 2 -->
+                        <div class="p-3.5 rounded-xl bg-zinc-950/70 border border-zinc-800 space-y-2">
+                            <span class="text-xs font-mono uppercase text-indigo-400 font-semibold">Schritt 2: 15M Liquidity Sweep</span>
+                            <label class="flex items-start gap-3 cursor-pointer text-xs sm:text-sm text-zinc-300 hover:text-white">
+                                <input type="checkbox" onchange="updateChecklistProgress()" class="chk-item mt-1 rounded bg-zinc-900 border-zinc-700 text-indigo-600 focus:ring-0">
+                                <span><strong>15M-Kerzenschluss zurück in der Range:</strong> Entweder 1-Kerzen-Sweep oder 2-Kerzen-Sweep (Body 2 überdeckt Body 1).</span>
+                            </label>
+                            <label class="flex items-start gap-3 cursor-pointer text-xs sm:text-sm text-zinc-300 hover:text-white">
+                                <input type="checkbox" onchange="updateChecklistProgress()" class="chk-item mt-1 rounded bg-zinc-900 border-zinc-700 text-indigo-600 focus:ring-0">
+                                <span><strong>Sweep-Tiefe gültig:</strong> Mindestens <strong>2 Pips</strong> und höchstens <strong>1x ATR(14) der 15M-Kerzen</strong>.</span>
+                            </label>
+                        </div>
+
+                        <!-- Step 3 & 4 -->
+                        <div class="p-3.5 rounded-xl bg-zinc-950/70 border border-zinc-800 space-y-2">
+                            <span class="text-xs font-mono uppercase text-indigo-400 font-semibold">Schritt 3 & 4: 5M-Bestätigung & Limit-Order</span>
+                            <label class="flex items-start gap-3 cursor-pointer text-xs sm:text-sm text-zinc-300 hover:text-white">
+                                <input type="checkbox" onchange="updateChecklistProgress()" class="chk-item mt-1 rounded bg-zinc-900 border-zinc-700 text-indigo-600 focus:ring-0">
+                                <span><strong>5M Minor Swing Bruch:</strong> 3-Kerzen-Swing vor dem Sweep-Extrem mit <strong>5M-Body-Close &ge; 1 Pip</strong> gebrochen (innerhalb des Handelsfensters).</span>
+                            </label>
+                            <label class="flex items-start gap-3 cursor-pointer text-xs sm:text-sm text-zinc-300 hover:text-white">
+                                <input type="checkbox" onchange="updateChecklistProgress()" class="chk-item mt-1 rounded bg-zinc-900 border-zinc-700 text-indigo-600 focus:ring-0">
+                                <span><strong>Limit-Order & RRR &ge; 1,8:</strong> Limit bei 50% Impuls (oder 50% FVG Fallback). Spread &le; 15% der SL-Distanz.</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="pt-2 flex items-center justify-between">
+                        <span id="checklist-status-text" class="text-xs font-mono text-zinc-400">0 / 8 Kriterien erfüllt</span>
+                        <span id="checklist-ready-badge" class="px-3 py-1 rounded-full text-xs font-mono font-semibold bg-zinc-800 text-zinc-400">Warte auf Check...</span>
+                    </div>
+                </div>
+
+                <!-- Right: Quick Calculators & Parameter Reference -->
+                <div class="lg:col-span-5 space-y-6">
+                    
+                    <!-- Mini SL & Puffer Rechner -->
+                    <div class="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-5">
+                        <div class="flex items-center gap-2.5 mb-3">
+                            <i data-lucide="calculator" class="w-5 h-5 text-indigo-400"></i>
+                            <h3 class="text-base font-semibold text-white">Live SL-Puffer & Max-Spread Rechner</h3>
+                        </div>
+                        <div class="grid grid-cols-3 gap-3 mb-3">
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Paar</label>
+                                <select id="calc-pair" onchange="runMiniCalc()" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white">
+                                    <option value="EUR/USD">EUR/USD</option>
+                                    <option value="GBP/CAD">GBP/CAD</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Aktueller Spread (P)</label>
+                                <input type="number" step="0.1" id="calc-spread" value="0.8" oninput="runMiniCalc()" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white">
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-zinc-400 block mb-1">Geplanter SL (P)</label>
+                                <input type="number" step="0.1" id="calc-sl" value="8.0" oninput="runMiniCalc()" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white">
+                            </div>
+                        </div>
+                        <div class="bg-zinc-950 border border-zinc-800 rounded-xl p-3.5 text-xs space-y-2 font-mono">
+                            <div class="flex justify-between">
+                                <span class="text-zinc-400">Pflicht-Puffer hinter Extrem:</span>
+                                <span id="calc-out-buffer" class="text-indigo-400 font-semibold">2.0 Pips</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-zinc-400">Spread-Anteil am SL (max 15%):</span>
+                                <span id="calc-out-spreadpct" class="text-emerald-400 font-semibold">10.0% (OK)</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-zinc-400">Mindest-Range für 2,5x SL:</span>
+                                <span id="calc-out-minrange" class="text-white">20.0 Pips</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Parameter-Übersicht (Abschnitt 7) -->
+                    <div class="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-5">
+                        <div class="flex items-center gap-2.5 mb-3">
+                            <i data-lucide="book-open" class="w-5 h-5 text-emerald-400"></i>
+                            <h3 class="text-base font-semibold text-white">Parameter-Referenz (Abschnitt 7)</h3>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse text-xs">
+                                <thead>
+                                    <tr class="border-b border-zinc-800 text-zinc-400 font-mono">
+                                        <th class="py-2">Parameter</th>
+                                        <th class="py-2">EUR/USD</th>
+                                        <th class="py-2">GBP/CAD</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-zinc-800/60">
+                                    <tr>
+                                        <td class="py-2 text-zinc-300">Mindest-Range</td>
+                                        <td class="py-2 font-mono text-white">15 Pips</td>
+                                        <td class="py-2 font-mono text-white">23 Pips</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="py-2 text-zinc-300">Mindest-SL</td>
+                                        <td class="py-2 font-mono text-white">6 Pips</td>
+                                        <td class="py-2 font-mono text-white">9 Pips</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="py-2 text-zinc-300">SL-Puffer hinter Extrem</td>
+                                        <td class="py-2 font-mono text-zinc-300" colspan="2">max(2 Pips, 2× Spread)</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="py-2 text-zinc-300">Maximale SL-Distanz</td>
+                                        <td class="py-2 font-mono text-zinc-300" colspan="2">35% Daily ATR &amp; max. 40% Range</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="py-2 text-zinc-300">Mindest-RRR</td>
+                                        <td class="py-2 font-mono text-emerald-400" colspan="2">1,8 R (Gegenseite Range -1 bis 2 Pips)</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="py-2 text-zinc-300">Breakeven &amp; 85%-Regel</td>
+                                        <td class="py-2 font-mono text-zinc-300" colspan="2">BE bei 50% TP-Weg | Market-Exit nach 85%-Fail</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="py-2 text-zinc-300">Zeitstopps (Vienna)</td>
+                                        <td class="py-2 font-mono text-amber-400" colspan="2">London: 13:30 Uhr | NY: 18:30 Uhr</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="py-2 text-zinc-300">Limit-Storno</td>
+                                        <td class="py-2 font-mono text-zinc-300" colspan="2">Nach 60 Min, bei 80% TP-Weg oder News (-15m)</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-zinc-900 py-4 px-6 text-center text-xs text-zinc-600 mt-auto">
+        Session-Sweep-System v2.1 • Alle Daten werden lokal in deinem Browser gespeichert (localStorage) • Nutze JSON-Backup für regelmäßige Sicherungen.
+    </footer>
+
+    <!-- Application Logic -->
+    <script>
+        // =========================================================================
+        // 1. INITIAL DATA (Corrected from Excel without Date/String formatting bugs)
+        // =========================================================================
+        const DEFAULT_TRADES = [
+            {
+                id: 't1',
+                date: '2026-10-19',
+                pair: 'EUR/USD',
+                session: 'London (08-11)',
+                status: 'Geplant / Ausgeführt',
+                skipReason: '-',
+                biasEma: 'Long',
+                biasStruct: 'Long',
+                direction: 'Long',
+                dailyAtr: 60,
+                rangePips: 20,
+                sweepType: '1-Kerzen-Sweep',
+                sweepDepth: 5,
+                m15Atr: 10,
+                m5Confirm: 'Ja',
+                entryMethod: '50% Impuls',
+                slPips: 8,
+                spreadPips: 0.8,
+                plannedRrr: 2.0,
+                riskPct: 0.50,
+                resStd: 2.0,
+                exitReason: 'TP',
+                resNoBe: 2.0,
+                resBe40: 2.0,
+                resBe1r: 2.0,
+                violation: 'Nein',
+                screenshot: '',
+                notes: 'Beispiel: Sauberer Sweep des Asia-Lows, direkt zum TP gelaufen'
+            },
+            {
+                id: 't2',
+                date: '2026-10-19',
+                pair: 'GBP/CAD',
+                session: 'NY (14-17)',
+                status: 'Limit nicht gefüllt',
+                skipReason: '80% TP vor Fill erreicht',
+                biasEma: 'Short',
+                biasStruct: 'Short',
+                direction: 'Short',
+                dailyAtr: 95,
+                rangePips: 30,
+                sweepType: '2-Kerzen-Sweep',
+                sweepDepth: 8,
+                m15Atr: 15,
+                m5Confirm: 'Ja',
+                entryMethod: 'FVG erstes Drittel',
+                slPips: 10,
+                spreadPips: 1.5, // Fixed from Excel date bug
+                plannedRrr: 2.5, // Fixed from Excel date bug
+                riskPct: 0.50,
+                resStd: 0.0,
+                exitReason: '-',
+                resNoBe: 0.0,
+                resBe40: 0.0,
+                resBe1r: 0.0,
+                violation: 'Nein',
+                screenshot: '',
+                notes: 'Beispiel: Limit knapp verpasst, Preis lief direkt zu 80% TP (Fill-Bias dokumentiert)'
+            },
+            {
+                id: 't3',
+                date: '2026-10-20',
+                pair: 'EUR/USD',
+                session: 'London (08-11)',
+                status: 'Übersprungen / Skip',
+                skipReason: 'Range zu klein',
+                biasEma: 'Neutral',
+                biasStruct: 'Beides',
+                direction: '-',
+                dailyAtr: 55,
+                rangePips: 11,
+                sweepType: '-',
+                sweepDepth: 0,
+                m15Atr: 8,
+                m5Confirm: 'Nein',
+                entryMethod: '-',
+                slPips: 0,
+                spreadPips: 0,
+                plannedRrr: 0,
+                riskPct: 0.50,
+                resStd: 0,
+                exitReason: '-',
+                resNoBe: 0,
+                resBe40: 0,
+                resBe1r: 0,
+                violation: 'Nein',
+                screenshot: '',
+                notes: 'Beispiel: Asia-Range unter 15 Pips Minimum -> Regelkonformer Skip'
+            }
+        ];
+
+        const DEFAULT_ATR_DAYS = [
+            { id: 'a1', date: '2026-10-19', pair: 'EUR/USD', dailyAtr: 60, asiaPips: 18, londonPips: 35 },
+            { id: 'a2', date: '2026-10-19', pair: 'GBP/CAD', dailyAtr: 95, asiaPips: 26, londonPips: 52 },
+            { id: 'a3', date: '2026-10-20', pair: 'EUR/USD', dailyAtr: 55, asiaPips: 11, londonPips: 28 }
+        ];
+
+        const STORAGE_KEYS = {
+            TRADES: 'sss_v21_trades',
+            ATR: 'sss_v21_atr',
+            FTMO: 'sss_v21_ftmo'
+        };
+
+        let trades = [];
+        let atrDays = [];
+        let ftmoState = { initial: 200000, equity: 192000 };
+        let currentDashFilter = 'ALL';
+
+        // =========================================================================
+        // 2. INITIALIZATION & STORAGE
+        // =========================================================================
+        window.onload = function() {
+            loadState();
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('form-date').value = today;
+            document.getElementById('atr-date').value = today;
+
+            updateFTMOTracker();
+            renderDashboard();
+            renderTradeTable();
+            renderAtrSection();
+            validateLiveForm();
+            runMiniCalc();
+            lucide.createIcons();
+        };
+
+        function loadState() {
+            try {
+                const rawTrades = localStorage.getItem(STORAGE_KEYS.TRADES);
+                trades = rawTrades ? JSON.parse(rawTrades) : [...DEFAULT_TRADES];
+
+                const rawAtr = localStorage.getItem(STORAGE_KEYS.ATR);
+                atrDays = rawAtr ? JSON.parse(rawAtr) : [...DEFAULT_ATR_DAYS];
+
+                const rawFtmo = localStorage.getItem(STORAGE_KEYS.FTMO);
+                if (rawFtmo) {
+                    ftmoState = JSON.parse(rawFtmo);
+                    document.getElementById('ftmo-initial').value = ftmoState.initial;
+                    document.getElementById('ftmo-equity').value = ftmoState.equity;
+                }
+            } catch (e) {
+                console.error('Fehler beim Laden aus localStorage:', e);
+                trades = [...DEFAULT_TRADES];
+                atrDays = [...DEFAULT_ATR_DAYS];
+            }
+        }
+
+        function saveState() {
+            localStorage.setItem(STORAGE_KEYS.TRADES, JSON.stringify(trades));
+            localStorage.setItem(STORAGE_KEYS.ATR, JSON.stringify(atrDays));
+            localStorage.setItem(STORAGE_KEYS.FTMO, JSON.stringify(ftmoState));
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').textContent = msg;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 3200);
+        }
+
+        // =========================================================================
+        // 3. TAB NAVIGATION
+        // =========================================================================
+        function switchTab(tabId) {
+            ['dashboard', 'logger', 'atr', 'rules'].forEach(id => {
+                document.getElementById(`tab-${id}`).classList.add('hidden');
+                const btn = document.getElementById(`tab-btn-${id}`);
+                btn.className = 'tab-btn px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition flex items-center gap-2 text-zinc-400 hover:text-zinc-200';
+            });
+
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+            const activeBtn = document.getElementById(`tab-btn-${tabId}`);
+            activeBtn.className = 'tab-btn px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition flex items-center gap-2 bg-zinc-800 text-white shadow-sm';
+            lucide.createIcons();
+        }
+
+        // =========================================================================
+        // 4. FTMO RISK & RECOVERY TRACKER (Abschnitt 2)
+        // =========================================================================
+        function updateFTMOTracker() {
+            const initial = parseFloat(document.getElementById('ftmo-initial').value) || 200000;
+            const equity = parseFloat(document.getElementById('ftmo-equity').value) || 200000;
+            ftmoState = { initial, equity };
+            saveState();
+
+            const diffUsd = equity - initial;
+            const diffPct = (diffUsd / initial) * 100;
+
+            const ddEl = document.getElementById('ftmo-dd-pct');
+            ddEl.textContent = `${diffPct >= 0 ? '+' : ''}${diffPct.toFixed(2)}% (${diffUsd >= 0 ? '+' : ''}${diffUsd.toLocaleString('de-DE')} $)`;
+            ddEl.className = `text-sm font-mono font-semibold ${diffPct < 0 ? 'text-rose-400' : 'text-emerald-400'}`;
+
+            // Determine base risk tier
+            // Tier 0 = 0.50%, Tier 1 = 0.75%, Tier 2 = 1.00%
+            let tierIndex = 2;
+            let reason = 'Equity über Initial Balance (1,00% Standard)';
+            if (diffPct < -2.0) {
+                tierIndex = 0;
+                reason = 'Equity unter -2% von Initial Balance';
+            } else if (diffPct < 0) {
+                tierIndex = 1;
+                reason = 'Equity zwischen -2% und 0%';
+            }
+
+            // Check last 3 executed trades for consecutive losses
+            const executed = trades.filter(t => t.status === 'Geplant / Ausgeführt');
+            let consecutiveLosses = 0;
+            for (let i = executed.length - 1; i >= 0; i--) {
+                const r = parseFloat(executed[i].resStd) || 0;
+                if (r < 0) {
+                    consecutiveLosses++;
+                } else if (r > 0) {
+                    break; // Winner resets streak
+                }
+            }
+
+            const streakBadge = document.getElementById('ftmo-streak-badge');
+            if (consecutiveLosses >= 3) {
+                tierIndex = Math.max(0, tierIndex - 1);
+                reason += ' + Abstufung (3 Verluste in Folge)';
+                streakBadge.textContent = `Ja (${consecutiveLosses}L in Folge -> -1 Stufe)`;
+                streakBadge.className = 'text-xs font-mono px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30';
+            } else {
+                streakBadge.textContent = `Nein (${consecutiveLosses}L in Folge)`;
+                streakBadge.className = 'text-xs font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300';
+            }
+
+            const tiers = [0.50, 0.75, 1.00];
+            const allowedRisk = tiers[tierIndex];
+            const allowedUsd = Math.round(equity * (allowedRisk / 100));
+
+            document.getElementById('ftmo-allowed-risk').textContent = `${allowedRisk.toFixed(2)}%`;
+            document.getElementById('ftmo-allowed-usd').textContent = `${allowedUsd.toLocaleString('de-DE')} $ / Trade`;
+            document.getElementById('ftmo-tier-reason').textContent = reason;
+
+            // Pre-fill form risk input if not currently editing
+            if (!document.getElementById('form-edit-id').value) {
+                document.getElementById('form-risk-pct').value = allowedRisk.toFixed(2);
+            }
+        }
+
+        // =========================================================================
+        // 5. DASHBOARD & VARIANTEN-AUSWERTUNG
+        // =========================================================================
+        function setDashboardFilter(pair) {
+            currentDashFilter = pair;
+            ['ALL', 'EUR/USD', 'GBP/CAD'].forEach(p => {
+                const btn = document.getElementById(`filter-btn-${p}`);
+                if (p === pair) {
+                    btn.className = 'dash-filter-btn px-3 py-1 rounded-lg text-xs font-medium bg-indigo-600 text-white transition';
+                } else {
+                    btn.className = 'dash-filter-btn px-3 py-1 rounded-lg text-xs font-medium text-zinc-400 hover:text-white transition';
+                }
+            });
+            renderDashboard();
+        }
+
+        function calcStatsForSubset(subset, rField = 'resStd') {
+            const count = subset.length;
+            if (count === 0) return { count: 0, wins: 0, losses: 0, be: 0, winrate: 0, sumR: 0, exp: 0 };
+            let wins = 0, losses = 0, be = 0, sumR = 0;
+            subset.forEach(t => {
+                const r = parseFloat(t[rField]) || 0;
+                sumR += r;
+                if (r > 0) wins++;
+                else if (r < 0) losses++;
+                else be++;
+            });
+            const winLossTotal = wins + losses;
+            const winrate = winLossTotal > 0 ? (wins / winLossTotal) * 100 : 0;
+            const exp = sumR / count;
+            return { count, wins, losses, be, winrate, sumR, exp };
+        }
+
+        function renderDashboard() {
+            const filtered = currentDashFilter === 'ALL' ? trades : trades.filter(t => t.pair === currentDashFilter);
+            const executed = filtered.filter(t => t.status === 'Geplant / Ausgeführt');
+            const unfilled = filtered.filter(t => t.status === 'Limit nicht gefüllt');
+            const skipped = filtered.filter(t => t.status === 'Übersprungen / Skip');
+
+            const totalSessions = filtered.length;
+            const execCount = executed.length;
+            const unfilledCount = unfilled.length;
+            const skipCount = skipped.length;
+
+            // Echte Order Fill-Rate = Ausgeführt / (Ausgeführt + Limit nicht gefüllt)
+            const placedOrders = execCount + unfilledCount;
+            const fillRate = placedOrders > 0 ? (execCount / placedOrders) * 100 : 0;
+
+            const stdStats = calcStatsForSubset(executed, 'resStd');
+            const violationsCount = filtered.filter(t => t.violation === 'Ja').length;
+
+            // Update KPI Cards
+            document.getElementById('kpi-sessions').textContent = totalSessions;
+            document.getElementById('kpi-executed').textContent = execCount;
+            document.getElementById('kpi-exec-rate').textContent = `${totalSessions > 0 ? ((execCount / totalSessions) * 100).toFixed(0) : 0}% aller Sessions`;
+            document.getElementById('kpi-fillrate').textContent = `${fillRate.toFixed(1)}%`;
+            document.getElementById('kpi-unfilled-count').textContent = `${unfilledCount} ungefüllte Limits`;
+            document.getElementById('kpi-skips').textContent = skipCount;
+
+            document.getElementById('kpi-winrate').textContent = `${stdStats.winrate.toFixed(1)}%`;
+            document.getElementById('kpi-wl-ratio').textContent = `${stdStats.wins}W / ${stdStats.losses}L / ${stdStats.be}BE`;
+
+            const totalREl = document.getElementById('kpi-total-r');
+            totalREl.textContent = `${stdStats.sumR >= 0 ? '+' : ''}${stdStats.sumR.toFixed(2)} R`;
+            totalREl.className = `text-2xl font-mono font-bold ${stdStats.sumR >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+
+            const expEl = document.getElementById('kpi-expectancy');
+            expEl.textContent = `${stdStats.exp >= 0 ? '+' : ''}${stdStats.exp.toFixed(2)} R`;
+            expEl.className = `text-2xl font-mono font-bold ${stdStats.exp >= 0.2 ? 'text-emerald-400' : stdStats.exp >= 0 ? 'text-amber-400' : 'text-rose-400'}`;
+
+            const violEl = document.getElementById('kpi-violations');
+            violEl.textContent = violationsCount;
+            violEl.className = `text-2xl font-mono font-bold ${violationsCount === 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+
+            // Go-Live Check Criteria
+            const c1Pass = execCount >= 100;
+            const c1Pct = Math.min(100, (execCount / 100) * 100);
+            document.getElementById('golive-c1-text').textContent = `${execCount} / 100 Trades`;
+            document.getElementById('golive-c1-text').className = `text-xs font-mono ${c1Pass ? 'text-emerald-400' : 'text-amber-400'}`;
+            document.getElementById('golive-c1-bar').style.width = `${c1Pct}%`;
+
+            const c2Pass = execCount > 0 && stdStats.exp > 0.20;
+            const c2Badge = document.getElementById('golive-c2-badge');
+            c2Badge.textContent = c2Pass ? `Bestanden (${stdStats.exp >= 0 ? '+' : ''}${stdStats.exp.toFixed(2)}R)` : `Offen (${stdStats.exp.toFixed(2)}R)`;
+            c2Badge.className = `px-2.5 py-1 rounded-lg text-xs font-mono font-medium ${c2Pass ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`;
+
+            const last20 = executed.slice(-20);
+            const last20Violations = last20.filter(t => t.violation === 'Ja').length;
+            const c3Pass = last20.length >= 20 && last20Violations === 0;
+            const c3Badge = document.getElementById('golive-c3-badge');
+            if (last20Violations > 0) {
+                c3Badge.textContent = `${last20Violations} Verstoß in letzten 20`;
+                c3Badge.className = 'px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20';
+            } else {
+                c3Badge.textContent = `0 Verstöße (${last20.length}/20 Trades)`;
+                c3Badge.className = `px-2.5 py-1 rounded-lg text-xs font-mono font-medium ${c3Pass ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`;
+            }
+
+            const masterBadge = document.getElementById('golive-master-badge');
+            if (c1Pass && c2Pass && c3Pass) {
+                masterBadge.textContent = 'GO-LIVE FREIGEGEBEN';
+                masterBadge.className = 'px-3 py-1 rounded-full text-xs font-mono font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+            } else {
+                masterBadge.textContent = 'NOCH IN TESTPHASE';
+                masterBadge.className = 'px-3 py-1 rounded-full text-xs font-mono font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20';
+            }
+
+            // Render Variants Matrix Table
+            const sNoBe = calcStatsForSubset(executed, 'resNoBe');
+            const sBe40 = calcStatsForSubset(executed, 'resBe40');
+            const sBe1r = calcStatsForSubset(executed, 'resBe1r');
+
+            const sweep1 = calcStatsForSubset(executed.filter(t => t.sweepType === '1-Kerzen-Sweep'), 'resStd');
+            const sweep2 = calcStatsForSubset(executed.filter(t => t.sweepType === '2-Kerzen-Sweep'), 'resStd');
+
+            const entryImp = calcStatsForSubset(executed.filter(t => t.entryMethod === '50% Impuls'), 'resStd');
+            const entryFvg = calcStatsForSubset(executed.filter(t => t.entryMethod && t.entryMethod.includes('FVG')), 'resStd');
+
+            const biasWithEma = calcStatsForSubset(executed.filter(t => t.biasEma === t.direction), 'resStd');
+            const biasWithStruct = calcStatsForSubset(executed.filter(t => t.biasStruct === t.direction), 'resStd');
+            const biasNeutralOrCounter = calcStatsForSubset(executed.filter(t => t.biasEma !== t.direction), 'resStd');
+
+            const rows = [
+                { group: 'Breakeven', name: 'Standard (BE bei 50% TP-Weg)', stats: stdStats, highlight: true },
+                { group: 'Breakeven', name: 'Kein Breakeven (SL bleibt)', stats: sNoBe },
+                { group: 'Breakeven', name: 'Früher Breakeven (BE bei 40% TP-Weg)', stats: sBe40 },
+                { group: 'Breakeven', name: '1R Breakeven (BE bei +1,0R)', stats: sBe1r },
+                { group: 'Sweep-Typ', name: '1-Kerzen-Sweep (15M)', stats: sweep1 },
+                { group: 'Sweep-Typ', name: '2-Kerzen-Sweep (15M Engulfing)', stats: sweep2 },
+                { group: 'Entry', name: '50% Reversal-Impuls (Standard)', stats: entryImp },
+                { group: 'Entry', name: '50% FVG Fallback', stats: entryFvg },
+                { group: 'Bias-Test', name: 'Mit 1H-EMA 50 Trend', stats: biasWithEma },
+                { group: 'Bias-Test', name: 'Mit 1H-Struktur Trend', stats: biasWithStruct },
+                { group: 'Bias-Test', name: 'Ohne / Gegen EMA 50 ("No-Bias" Vergleich)', stats: biasNeutralOrCounter }
+            ];
+
+            const tbody = document.getElementById('variants-table-body');
+            tbody.innerHTML = rows.map(r => {
+                const st = r.stats;
+                const badge = st.count === 0
+                    ? '<span class="text-zinc-500 font-mono text-xs">Keine Daten</span>'
+                    : st.exp > 0.20
+                        ? '<span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono text-xs">Edge (&gt;0.2R)</span>'
+                        : st.exp > 0
+                            ? '<span class="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 font-mono text-xs">Positiv</span>'
+                            : '<span class="px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 font-mono text-xs">Negativ</span>';
+
+                return `
+                    <tr class="${r.highlight ? 'bg-indigo-500/5' : 'hover:bg-zinc-800/30'}">
+                        <td class="py-2.5 px-3">
+                            <span class="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 mr-2">${r.group}</span>
+                            <span class="font-medium text-zinc-200">${r.name}</span>
+                        </td>
+                        <td class="py-2.5 px-3 text-right font-mono text-zinc-300">${st.count}</td>
+                        <td class="py-2.5 px-3 text-right font-mono text-zinc-300">${st.winrate.toFixed(1)}%</td>
+                        <td class="py-2.5 px-3 text-right font-mono font-semibold ${st.sumR >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${st.sumR >= 0 ? '+' : ''}${st.sumR.toFixed(2)} R</td>
+                        <td class="py-2.5 px-3 text-right font-mono font-semibold ${st.exp >= 0.2 ? 'text-emerald-400' : st.exp >= 0 ? 'text-zinc-200' : 'text-rose-400'}">${st.exp >= 0 ? '+' : ''}${st.exp.toFixed(2)} R</td>
+                        <td class="py-2.5 px-3 text-right">${badge}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Render Skip & Unfilled Reasons Breakdown
+            const reasonCounts = {};
+            filtered.forEach(t => {
+                if (t.status !== 'Geplant / Ausgeführt' && t.skipReason && t.skipReason !== '-') {
+                    reasonCounts[t.skipReason] = (reasonCounts[t.skipReason] || 0) + 1;
+                }
+            });
+
+            const sortedReasons = Object.entries(reasonCounts).sort((a, b) => b[1] - a[1]);
+            const skipContainer = document.getElementById('skip-reasons-list');
+            if (sortedReasons.length === 0) {
+                skipContainer.innerHTML = '<div class="text-xs text-zinc-500 italic py-4 text-center">Noch keine übersprungenen Sessions oder verfallenen Limits dokumentiert.</div>';
+            } else {
+                const maxVal = sortedReasons[0][1];
+                skipContainer.innerHTML = sortedReasons.map(([reason, count]) => {
+                    const pct = Math.round((count / maxVal) * 100);
+                    return `
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-xs">
+                                <span class="text-zinc-300">${reason}</span>
+                                <span class="font-mono text-amber-400">${count}×</span>
+                            </div>
+                            <div class="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                                <div class="h-full bg-amber-500/80 rounded-full" style="width: ${pct}%"></div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+
+        // =========================================================================
+        // 6. SMART TRADE FORM & LIVE RULE VALIDATION
+        // =========================================================================
+        function validateLiveForm() {
+            const pair = document.getElementById('form-pair').value;
+            const session = document.getElementById('form-session').value;
+            const status = document.getElementById('form-status').value;
+            const dailyAtr = parseFloat(document.getElementById('form-daily-atr').value) || 0;
+            const rangePips = parseFloat(document.getElementById('form-range-pips').value) || 0;
+            const sweepDepth = parseFloat(document.getElementById('form-sweep-depth').value) || 0;
+            const m15Atr = parseFloat(document.getElementById('form-m15-atr').value) || 0;
+            const slPips = parseFloat(document.getElementById('form-sl-pips').value) || 0;
+            const spreadPips = parseFloat(document.getElementById('form-spread-pips').value) || 0;
+            const rrr = parseFloat(document.getElementById('form-rrr').value) || 0;
+            const m5Confirm = document.getElementById('form-m5-confirm').value;
+
+            // Calculated Read-Only Fields
+            const rangeAtrPct = dailyAtr > 0 ? (rangePips / dailyAtr) * 100 : 0;
+            document.getElementById('form-range-atr-pct').value = `${rangeAtrPct.toFixed(1)}%`;
+
+            const spreadPct = slPips > 0 ? (spreadPips / slPips) * 100 : 0;
+            document.getElementById('form-spread-pct').value = `${spreadPct.toFixed(1)}%`;
+
+            const rangeSlRatio = slPips > 0 ? (rangePips / slPips) : 0;
+            document.getElementById('form-range-sl-ratio').value = `${rangeSlRatio.toFixed(2)}x`;
+
+            // Rule Checks
+            const minRange = pair === 'EUR/USD' ? 15 : 23;
+            const minAtrPct = session.includes('London') ? 15 : 30;
+            const maxAtrPct = session.includes('London') ? 50 : 80;
+            const rangeOk = rangePips >= minRange && rangeAtrPct >= minAtrPct && rangeAtrPct <= maxAtrPct;
+
+            const sweepOk = sweepDepth >= 2 && sweepDepth <= m15Atr;
+
+            const minSl = pair === 'EUR/USD' ? 6 : 9;
+            const maxSlAtr = dailyAtr * 0.35;
+            const maxSlRange = rangePips * 0.40;
+            const slOk = slPips >= minSl && slPips <= maxSlAtr && slPips <= maxSlRange;
+
+            const spreadOk = spreadPct <= 15.0 && spreadPct >= 0;
+            const ratioOk = rangeSlRatio >= 2.5;
+            const rrrOk = rrr >= 1.8;
+            const m5Ok = m5Confirm === 'Ja';
+
+            const badge = (ok, text) => `<span class="px-2 py-0.5 rounded text-[11px] font-mono ${ok ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}">${ok ? '✓' : '✗'} ${text}</span>`;
+
+            document.getElementById('validation-badges-row1').innerHTML = [
+                badge(rangeOk, `Range: ${rangePips}p (${rangeAtrPct.toFixed(0)}% ATR | Ziel: ≥${minRange}p & ${minAtrPct}-${maxAtrPct}%)`),
+                badge(sweepOk, `Sweep: ${sweepDepth}p (Ziel: 2p bis ${m15Atr}p)`)
+            ].join('');
+
+            document.getElementById('validation-badges-row2').innerHTML = [
+                badge(m5Ok, `5M Body Close`),
+                badge(slOk, `SL: ${slPips}p (Min ${minSl}p, Max ${Math.min(maxSlAtr, maxSlRange).toFixed(1)}p)`),
+                badge(spreadOk, `Spread: ${spreadPct.toFixed(1)}% (≤15%)`),
+                badge(ratioOk, `Range/SL: ${rangeSlRatio.toFixed(1)}x (≥2.5x)`),
+                badge(rrrOk, `RRR: ${rrr} (≥1.8)`)
+            ].join('');
+
+            const allValid = rangeOk && sweepOk && slOk && spreadOk && ratioOk && rrrOk && m5Ok;
+            const masterBadge = document.getElementById('live-rule-summary-badge');
+
+            if (status !== 'Geplant / Ausgeführt') {
+                masterBadge.textContent = `Session Status: ${status}`;
+                masterBadge.className = 'px-3 py-1 rounded-full text-xs font-mono font-medium bg-zinc-800 text-zinc-300';
+            } else if (allValid) {
+                masterBadge.textContent = 'Alle Regeln 100% erfüllt';
+                masterBadge.className = 'px-3 py-1 rounded-full text-xs font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+            } else {
+                masterBadge.textContent = 'Achtung: Regelabweichung erkannt!';
+                masterBadge.className = 'px-3 py-1 rounded-full text-xs font-mono font-medium bg-rose-500/15 text-rose-400 border border-rose-500/30';
+            }
+        }
+
+        function setQuickR(val, exitReason) {
+            document.getElementById('form-res-std').value = val;
+            document.getElementById('form-exit-reason').value = exitReason;
+        }
+
+        function setQuickRFromPlanned() {
+            const rrr = parseFloat(document.getElementById('form-rrr').value) || 1.8;
+            document.getElementById('form-res-std').value = rrr;
+            document.getElementById('form-exit-reason').value = 'TP';
+        }
+
+        function syncVariantsWithStandard() {
+            const std = document.getElementById('form-res-std').value;
+            document.getElementById('form-res-nobe').value = std;
+            document.getElementById('form-res-be40').value = std;
+            document.getElementById('form-res-be1r').value = std;
+        }
+
+        function saveTradeEntry(e) {
+            e.preventDefault();
+            const editId = document.getElementById('form-edit-id').value;
+            const status = document.getElementById('form-status').value;
+            const isExec = status === 'Geplant / Ausgeführt';
+
+            const entry = {
+                id: editId || 't_' + Date.now(),
+                date: document.getElementById('form-date').value,
+                pair: document.getElementById('form-pair').value,
+                session: document.getElementById('form-session').value,
+                status: status,
+                skipReason: isExec ? '-' : document.getElementById('form-skip-reason').value,
+                biasEma: document.getElementById('form-bias-ema').value,
+                biasStruct: document.getElementById('form-bias-struct').value,
+                direction: isExec ? document.getElementById('form-direction').value : '-',
+                dailyAtr: parseFloat(document.getElementById('form-daily-atr').value) || 0,
+                rangePips: parseFloat(document.getElementById('form-range-pips').value) || 0,
+                sweepType: document.getElementById('form-sweep-type').value,
+                sweepDepth: parseFloat(document.getElementById('form-sweep-depth').value) || 0,
+                m15Atr: parseFloat(document.getElementById('form-m15-atr').value) || 0,
+                m5Confirm: document.getElementById('form-m5-confirm').value,
+                entryMethod: document.getElementById('form-entry-method').value,
+                slPips: parseFloat(document.getElementById('form-sl-pips').value) || 0,
+                spreadPips: parseFloat(document.getElementById('form-spread-pips').value) || 0,
+                plannedRrr: parseFloat(document.getElementById('form-rrr').value) || 0,
+                riskPct: parseFloat(document.getElementById('form-risk-pct').value) || 0.5,
+                resStd: isExec ? (parseFloat(document.getElementById('form-res-std').value) || 0) : 0,
+                exitReason: isExec ? document.getElementById('form-exit-reason').value : '-',
+                resNoBe: isExec ? (parseFloat(document.getElementById('form-res-nobe').value) || 0) : 0,
+                resBe40: isExec ? (parseFloat(document.getElementById('form-res-be40').value) || 0) : 0,
+                resBe1r: isExec ? (parseFloat(document.getElementById('form-res-be1r').value) || 0) : 0,
+                violation: document.getElementById('form-violation').value,
+                screenshot: document.getElementById('form-screenshot').value.trim(),
+                notes: document.getElementById('form-notes').value.trim()
+            };
+
+            if (editId) {
+                const idx = trades.findIndex(t => t.id === editId);
+                if (idx !== -1) trades[idx] = entry;
+                showToast('Eintrag aktualisiert');
+            } else {
+                trades.push(entry);
+                showToast('Session / Trade erfolgreich gespeichert');
+            }
+
+            saveState();
+            resetTradeForm();
+            updateFTMOTracker();
+            renderDashboard();
+            renderTradeTable();
+        }
+
+        function resetTradeForm() {
+            document.getElementById('form-edit-id').value = '';
+            document.getElementById('form-title').textContent = 'Neue Session / Trade erfassen';
+            document.getElementById('form-submit-label').textContent = 'Session / Trade im Journal speichern';
+            document.getElementById('form-status').value = 'Geplant / Ausgeführt';
+            document.getElementById('form-skip-reason').value = '-';
+            document.getElementById('form-violation').value = 'Nein';
+            document.getElementById('form-screenshot').value = '';
+            document.getElementById('form-notes').value = '';
+            validateLiveForm();
+        }
+
+        function editTrade(id) {
+            const t = trades.find(x => x.id === id);
+            if (!t) return;
+            document.getElementById('form-edit-id').value = t.id;
+            document.getElementById('form-title').textContent = 'Eintrag bearbeiten';
+            document.getElementById('form-submit-label').textContent = 'Änderungen speichern';
+
+            document.getElementById('form-date').value = t.date;
+            document.getElementById('form-pair').value = t.pair;
+            document.getElementById('form-session').value = t.session;
+            document.getElementById('form-status').value = t.status;
+            document.getElementById('form-skip-reason').value = t.skipReason || '-';
+            document.getElementById('form-bias-ema').value = t.biasEma;
+            document.getElementById('form-bias-struct').value = t.biasStruct;
+            document.getElementById('form-direction').value = t.direction;
+            document.getElementById('form-daily-atr').value = t.dailyAtr;
+            document.getElementById('form-range-pips').value = t.rangePips;
+            document.getElementById('form-sweep-type').value = t.sweepType;
+            document.getElementById('form-sweep-depth').value = t.sweepDepth;
+            document.getElementById('form-m15-atr').value = t.m15Atr;
+            document.getElementById('form-m5-confirm').value = t.m5Confirm;
+            document.getElementById('form-entry-method').value = t.entryMethod;
+            document.getElementById('form-sl-pips').value = t.slPips;
+            document.getElementById('form-spread-pips').value = t.spreadPips;
+            document.getElementById('form-rrr').value = t.plannedRrr;
+            document.getElementById('form-risk-pct').value = t.riskPct;
+            document.getElementById('form-res-std').value = t.resStd;
+            document.getElementById('form-exit-reason').value = t.exitReason;
+            document.getElementById('form-res-nobe').value = t.resNoBe;
+            document.getElementById('form-res-be40').value = t.resBe40;
+            document.getElementById('form-res-be1r').value = t.resBe1r;
+            document.getElementById('form-violation').value = t.violation;
+            document.getElementById('form-screenshot').value = t.screenshot || '';
+            document.getElementById('form-notes').value = t.notes || '';
+
+            validateLiveForm();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function deleteTrade(id) {
+            trades = trades.filter(t => t.id !== id);
+            saveState();
+            updateFTMOTracker();
+            renderDashboard();
+            renderTradeTable();
+            showToast('Eintrag gelöscht');
+        }
+
+        function renderTradeTable() {
+            const pairFilter = document.getElementById('log-filter-pair').value;
+            const statusFilter = document.getElementById('log-filter-status').value;
+            const query = document.getElementById('log-search').value.toLowerCase().trim();
+
+            const filtered = trades.filter(t => {
+                if (pairFilter !== 'ALL' && t.pair !== pairFilter) return false;
+                if (statusFilter !== 'ALL' && t.status !== statusFilter) return false;
+                if (query) {
+                    const hay = `${t.date} ${t.pair} ${t.skipReason} ${t.notes} ${t.entryMethod}`.toLowerCase();
+                    if (!hay.includes(query)) return false;
+                }
+                return true;
+            });
+
+            const tbody = document.getElementById('trade-log-tbody');
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="14" class="py-8 text-center text-zinc-500">Keine Einträge für diesen Filter gefunden.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = filtered.map((t, idx) => {
+                const isExec = t.status === 'Geplant / Ausgeführt';
+                const rangePct = t.dailyAtr > 0 ? ((t.rangePips / t.dailyAtr) * 100).toFixed(0) : 0;
+                const spreadPct = t.slPips > 0 ? ((t.spreadPips / t.slPips) * 100).toFixed(1) : 0;
+
+                const statusBadge = isExec
+                    ? '<span class="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-medium">Ausgeführt</span>'
+                    : t.status === 'Limit nicht gefüllt'
+                        ? `<span class="px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">Ungefüllt (${t.skipReason})</span>`
+                        : `<span class="px-2 py-0.5 rounded bg-zinc-800 text-zinc-400">Skip: ${t.skipReason}</span>`;
+
+                const rColor = t.resStd > 0 ? 'text-emerald-400 font-bold' : t.resStd < 0 ? 'text-rose-400 font-bold' : 'text-zinc-400';
+
+                return `
+                    <tr class="hover:bg-zinc-800/30 transition">
+                        <td class="py-2.5 px-2.5 font-mono text-zinc-500">${idx + 1}</td>
+                        <td class="py-2.5 px-2.5">
+                            <div class="font-mono text-white">${t.date}</div>
+                            <div class="text-[11px] text-zinc-500">${t.session}</div>
+                        </td>
+                        <td class="py-2.5 px-2.5 font-mono font-semibold text-zinc-200">${t.pair}</td>
+                        <td class="py-2.5 px-2.5">${statusBadge}</td>
+                        <td class="py-2.5 px-2.5 text-zinc-300">${t.biasEma} / ${t.biasStruct}</td>
+                        <td class="py-2.5 px-2.5 font-mono ${t.direction === 'Long' ? 'text-emerald-400' : t.direction === 'Short' ? 'text-rose-400' : 'text-zinc-500'}">${t.direction}</td>
+                        <td class="py-2.5 px-2.5 font-mono text-zinc-300">${t.rangePips}p <span class="text-zinc-500">(${rangePct}%)</span></td>
+                        <td class="py-2.5 px-2.5 text-zinc-300">${t.sweepType} <span class="font-mono text-zinc-500">(${t.sweepDepth}p)</span></td>
+                        <td class="py-2.5 px-2.5 font-mono text-zinc-300">${t.entryMethod} | SL:${t.slPips}p <span class="${spreadPct > 15 ? 'text-rose-400' : 'text-zinc-500'}">(${spreadPct}%)</span></td>
+                        <td class="py-2.5 px-2.5 text-right font-mono text-zinc-300">${isExec ? t.plannedRrr.toFixed(2) + 'R' : '-'}</td>
+                        <td class="py-2.5 px-2.5 text-right font-mono ${rColor}">${isExec ? (t.resStd >= 0 ? '+' : '') + t.resStd.toFixed(2) + 'R (' + t.exitReason + ')' : '-'}</td>
+                        <td class="py-2.5 px-2.5 text-right font-mono text-zinc-400">${isExec ? `${t.resNoBe.toFixed(1)} / ${t.resBe40.toFixed(1)} / ${t.resBe1r.toFixed(1)}` : '-'}</td>
+                        <td class="py-2.5 px-2.5">
+                            <span class="px-2 py-0.5 rounded font-mono text-[11px] ${t.violation === 'Ja' ? 'bg-rose-500/20 text-rose-300' : 'bg-zinc-800 text-zinc-400'}">${t.violation}</span>
+                        </td>
+                        <td class="py-2.5 px-2.5 text-right">
+                            <div class="inline-flex items-center gap-1">
+                                ${t.screenshot ? `<a href="${t.screenshot}" target="_blank" class="p-1 rounded hover:bg-zinc-800 text-indigo-400" title="Chart öffnen"><i data-lucide="external-link" class="w-3.5 h-3.5"></i></a>` : ''}
+                                <button onclick="editTrade('${t.id}')" class="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white" title="Bearbeiten"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+                                <button onclick="deleteTrade('${t.id}')" class="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-rose-400" title="Löschen"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        // =========================================================================
+        // 7. ATR-KALIBRIERUNG (100 TAGE PERZENTIL-RECHNER)
+        // =========================================================================
+        function addAtrEntry(e) {
+            e.preventDefault();
+            const entry = {
+                id: 'a_' + Date.now(),
+                date: document.getElementById('atr-date').value,
+                pair: document.getElementById('atr-pair').value,
+                dailyAtr: parseFloat(document.getElementById('atr-daily').value) || 1,
+                asiaPips: parseFloat(document.getElementById('atr-asia').value) || 0,
+                londonPips: parseFloat(document.getElementById('atr-london').value) || 0
+            };
+            atrDays.push(entry);
+            saveState();
+            renderAtrSection();
+            showToast('Kalibrierungs-Tag hinzugefügt');
+        }
+
+        function deleteAtrEntry(id) {
+            atrDays = atrDays.filter(a => a.id !== id);
+            saveState();
+            renderAtrSection();
+        }
+
+        function getPercentile(sortedArr, p) {
+            if (sortedArr.length === 0) return 0;
+            const index = (p / 100) * (sortedArr.length - 1);
+            const lower = Math.floor(index);
+            const upper = Math.ceil(index);
+            const weight = index - lower;
+            return sortedArr[lower] * (1 - weight) + sortedArr[upper] * weight;
+        }
+
+        function renderAtrSection() {
+            const filterPair = document.getElementById('atr-stats-filter').value;
+            const filtered = filterPair === 'ALL' ? atrDays : atrDays.filter(a => a.pair === filterPair);
+
+            document.getElementById('atr-count-badge').textContent = `${filtered.length} / 100 Tage`;
+
+            const tbody = document.getElementById('atr-table-body');
+            tbody.innerHTML = filtered.map((a, i) => {
+                const asiaPct = ((a.asiaPips / a.dailyAtr) * 100).toFixed(1);
+                const lonPct = ((a.londonPips / a.dailyAtr) * 100).toFixed(1);
+                return `
+                    <tr class="hover:bg-zinc-800/30">
+                        <td class="py-2 px-3 text-zinc-500">${i + 1}</td>
+                        <td class="py-2 px-3 text-white">${a.date}</td>
+                        <td class="py-2 px-3 text-zinc-300">${a.pair}</td>
+                        <td class="py-2 px-3 text-right text-zinc-300">${a.dailyAtr}p</td>
+                        <td class="py-2 px-3 text-right text-emerald-400">${a.asiaPips}p (${asiaPct}%)</td>
+                        <td class="py-2 px-3 text-right text-indigo-400">${a.londonPips}p (${lonPct}%)</td>
+                        <td class="py-2 px-3 text-right">
+                            <button onclick="deleteAtrEntry('${a.id}')" class="text-zinc-500 hover:text-rose-400"><i data-lucide="x" class="w-3.5 h-3.5 inline"></i></button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            const asiaPcts = filtered.map(a => (a.asiaPips / a.dailyAtr) * 100).sort((a, b) => a - b);
+            const lonPcts = filtered.map(a => (a.londonPips / a.dailyAtr) * 100).sort((a, b) => a - b);
+
+            const mean = arr => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
+
+            document.getElementById('atr-mean-asia').textContent = `${mean(asiaPcts).toFixed(1)}%`;
+            document.getElementById('atr-mean-london').textContent = `${mean(lonPcts).toFixed(1)}%`;
+
+            document.getElementById('atr-p15-asia').textContent = `${getPercentile(asiaPcts, 15).toFixed(1)}%`;
+            document.getElementById('atr-p15-london').textContent = `${getPercentile(lonPcts, 15).toFixed(1)}%`;
+
+            document.getElementById('atr-p50-asia').textContent = `${getPercentile(asiaPcts, 50).toFixed(1)}%`;
+            document.getElementById('atr-p50-london').textContent = `${getPercentile(lonPcts, 50).toFixed(1)}%`;
+
+            document.getElementById('atr-p80-asia').textContent = `${getPercentile(asiaPcts, 80).toFixed(1)}%`;
+            document.getElementById('atr-p80-london').textContent = `${getPercentile(lonPcts, 80).toFixed(1)}%`;
+
+            lucide.createIcons();
+        }
+
+        // =========================================================================
+        // 8. CHECKLIST & MINI CALCULATOR
+        // =========================================================================
+        function updateChecklistProgress() {
+            const boxes = document.querySelectorAll('.chk-item');
+            const checked = Array.from(boxes).filter(b => b.checked).length;
+            const total = boxes.length;
+
+            document.getElementById('checklist-status-text').textContent = `${checked} / ${total} Kriterien erfüllt`;
+            const badge = document.getElementById('checklist-ready-badge');
+            if (checked === total) {
+                badge.textContent = 'FREIGABE: LIMIT-ORDER PLATZIEREN';
+                badge.className = 'px-3 py-1 rounded-full text-xs font-mono font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+            } else {
+                badge.textContent = `Noch ${total - checked} Kriterien offen`;
+                badge.className = 'px-3 py-1 rounded-full text-xs font-mono font-semibold bg-zinc-800 text-zinc-400';
+            }
+        }
+
+        function resetChecklist() {
+            document.querySelectorAll('.chk-item').forEach(b => b.checked = false);
+            updateChecklistProgress();
+        }
+
+        function runMiniCalc() {
+            const spread = parseFloat(document.getElementById('calc-spread').value) || 0;
+            const sl = parseFloat(document.getElementById('calc-sl').value) || 1;
+            const buffer = Math.max(2.0, spread * 2.0);
+            const spreadPct = (spread / sl) * 100;
+            const minRange = sl * 2.5;
+
+            document.getElementById('calc-out-buffer').textContent = `${buffer.toFixed(1)} Pips`;
+            const spEl = document.getElementById('calc-out-spreadpct');
+            spEl.textContent = `${spreadPct.toFixed(1)}% ${spreadPct <= 15 ? '(OK ≤15%)' : '(ZU HOCH -> SKIP!)'}`;
+            spEl.className = spreadPct <= 15 ? 'text-emerald-400 font-semibold' : 'text-rose-400 font-semibold';
+            document.getElementById('calc-out-minrange').textContent = `${minRange.toFixed(1)} Pips`;
+        }
+
+        // =========================================================================
+        // 9. EXPORT / IMPORT / MODAL
+        // =========================================================================
+        function exportJSON() {
+            const payload = { version: '2.1', exportedAt: new Date().toISOString(), ftmoState, trades, atrDays };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Session-Sweep-System-v2.1-Backup-${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('JSON-Backup heruntergeladen');
+        }
+
+        function importJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (Array.isArray(data.trades)) trades = data.trades;
+                    if (Array.isArray(data.atrDays)) atrDays = data.atrDays;
+                    if (data.ftmoState) {
+                        ftmoState = data.ftmoState;
+                        document.getElementById('ftmo-initial').value = ftmoState.initial;
+                        document.getElementById('ftmo-equity').value = ftmoState.equity;
+                    }
+                    saveState();
+                    updateFTMOTracker();
+                    renderDashboard();
+                    renderTradeTable();
+                    renderAtrSection();
+                    showToast('Backup erfolgreich importiert');
+                } catch (err) {
+                    showToast('Fehler: Ungültige JSON-Datei');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function exportCSV() {
+            const headers = ['Datum','Paar','Session','Status','SkipGrund','BiasEMA','BiasStruktur','Richtung','DailyATR','RangePips','SweepTyp','SweepTiefe','15MATR','5MConfirm','EntryMethode','SLPips','SpreadPips','GeplanteRRR','RisikoPct','ErgebnisR_50BE','ExitGrund','OhneBE_R','BE40_R','BE1R_R','Regelverstoss','Notizen'];
+            const rows = trades.map(t => [
+                t.date, t.pair, t.session, t.status, t.skipReason, t.biasEma, t.biasStruct, t.direction,
+                t.dailyAtr, t.rangePips, t.sweepType, t.sweepDepth, t.m15Atr, t.m5Confirm, t.entryMethod,
+                t.slPips, t.spreadPips, t.plannedRrr, t.riskPct, t.resStd, t.exitReason,
+                t.resNoBe, t.resBe40, t.resBe1r, t.violation, `"${(t.notes || '').replace(/"/g, '""')}"`
+            ]);
+            const csv = [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Session-Sweep-Log-${new Date().toISOString().slice(0,10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('CSV für Excel exportiert');
+        }
+
+        function confirmResetData() {
+            const modal = document.getElementById('confirm-modal');
+            document.getElementById('modal-title').textContent = 'Auf Startwerte zurücksetzen?';
+            document.getElementById('modal-desc').textContent = 'Dadurch werden deine lokal gespeicherten Einträge auf die 3 fehlerbereinigten Beispiel-Trades zurückgesetzt. Erstelle vorher ein JSON-Backup, falls du Daten behalten möchtest.';
+            const btn = document.getElementById('modal-confirm-btn');
+            btn.onclick = () => {
+                trades = [...DEFAULT_TRADES];
+                atrDays = [...DEFAULT_ATR_DAYS];
+                ftmoState = { initial: 200000, equity: 192000 };
+                saveState();
+                updateFTMOTracker();
+                renderDashboard();
+                renderTradeTable();
+                renderAtrSection();
+                closeModal();
+                showToast('Daten auf Startwerte zurückgesetzt');
+            };
+            modal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('confirm-modal').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
