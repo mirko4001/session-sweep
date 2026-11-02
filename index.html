@@ -604,9 +604,12 @@
                             </div>
                             <div>
                                 <label class="text-[11px] text-zinc-400 block mb-1">Regelverstoß?</label>
-                                <select id="form-violation" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white">
-                                    <option value="Nein">Nein (Sauber)</option>
-                                    <option value="Ja">Ja (Regelbruch!)</option>
+                                <select id="form-violation" multiple size="5" onchange="normalizeViolationSelection(this)" class="w-full min-h-[8rem] bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white">
+                                    <option value="Nein" selected>Nein</option>
+                                    <option value="Gegen Bias">Gegen Bias</option>
+                                    <option value="Range Size">Range Size</option>
+                                    <option value="Sweep">Sweep</option>
+                                    <option value="Sonstiges">Sonstiges</option>
                                 </select>
                             </div>
                             <div>
@@ -1050,7 +1053,7 @@
                 resNoBe: 2.0,
                 resBe40: 2.0,
                 resBe1r: 2.0,
-                violation: 'Nein',
+                violation: ['Nein'],
                 screenshot: '',
                 notes: 'Beispiel: Sauberer Sweep des Asia-Lows, direkt zum TP gelaufen'
             },
@@ -1080,7 +1083,7 @@
                 resNoBe: 0.0,
                 resBe40: 0.0,
                 resBe1r: 0.0,
-                violation: 'Nein',
+                violation: ['Nein'],
                 screenshot: '',
                 notes: 'Beispiel: Limit knapp verpasst, Preis lief direkt zu 80% TP (Fill-Bias dokumentiert)'
             },
@@ -1110,7 +1113,7 @@
                 resNoBe: 0,
                 resBe40: 0,
                 resBe1r: 0,
-                violation: 'Nein',
+                violation: ['Nein'],
                 screenshot: '',
                 notes: 'Beispiel: Asia-Range unter 15 Pips Minimum -> Regelkonformer Skip'
             }
@@ -1132,6 +1135,27 @@
         let atrDays = [];
         let ftmoState = { initial: 200000, equity: 192000 };
         let currentDashFilter = 'ALL';
+
+        function getViolationValues(violation) {
+            const values = Array.isArray(violation)
+                ? violation
+                : typeof violation === 'string'
+                    ? violation.split(',').map(value => value.trim()).filter(Boolean)
+                    : [];
+            return values.filter(value => value !== 'Ja').length > 0
+                ? values.filter(value => value !== 'Ja')
+                : ['Nein'];
+        }
+
+        function normalizeViolationSelection(select) {
+            const selected = Array.from(select.selectedOptions).map(option => option.value);
+            if (selected.length === 0 || selected.includes('Nein')) {
+                select.value = 'Nein';
+                Array.from(select.options).forEach(option => {
+                    option.selected = option.value === 'Nein';
+                });
+            }
+        }
 
         // =========================================================================
         // 2. INITIALIZATION & STORAGE
@@ -1315,7 +1339,7 @@
             const fillRate = placedOrders > 0 ? (execCount / placedOrders) * 100 : 0;
 
             const stdStats = calcStatsForSubset(executed, 'resStd');
-            const violationsCount = filtered.filter(t => t.violation === 'Ja').length;
+            const violationsCount = filtered.filter(t => !getViolationValues(t.violation).includes('Nein')).length;
 
             // Update KPI Cards
             document.getElementById('kpi-sessions').textContent = totalSessions;
@@ -1353,7 +1377,7 @@
             c2Badge.className = `px-2.5 py-1 rounded-lg text-xs font-mono font-medium ${c2Pass ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`;
 
             const last20 = executed.slice(-20);
-            const last20Violations = last20.filter(t => t.violation === 'Ja').length;
+            const last20Violations = last20.filter(t => !getViolationValues(t.violation).includes('Nein')).length;
             const c3Pass = last20.length >= 20 && last20Violations === 0;
             const c3Badge = document.getElementById('golive-c3-badge');
             if (last20Violations > 0) {
@@ -1583,7 +1607,7 @@
                 resNoBe: isExec ? (parseFloat(document.getElementById('form-res-nobe').value) || 0) : 0,
                 resBe40: isExec ? (parseFloat(document.getElementById('form-res-be40').value) || 0) : 0,
                 resBe1r: isExec ? (parseFloat(document.getElementById('form-res-be1r').value) || 0) : 0,
-                violation: document.getElementById('form-violation').value,
+                violation: getViolationValues(Array.from(document.getElementById('form-violation').selectedOptions).map(option => option.value)),
                 screenshot: document.getElementById('form-screenshot').value.trim(),
                 notes: document.getElementById('form-notes').value.trim()
             };
@@ -1610,7 +1634,9 @@
             document.getElementById('form-submit-label').textContent = 'Session / Trade im Journal speichern';
             document.getElementById('form-status').value = 'Geplant / Ausgeführt';
             document.getElementById('form-skip-reason').value = '-';
-            document.getElementById('form-violation').value = 'Nein';
+            const violationSelect = document.getElementById('form-violation');
+            violationSelect.value = 'Nein';
+            normalizeViolationSelection(violationSelect);
             document.getElementById('form-screenshot').value = '';
             document.getElementById('form-notes').value = '';
             validateLiveForm();
@@ -1647,7 +1673,12 @@
             document.getElementById('form-res-nobe').value = t.resNoBe;
             document.getElementById('form-res-be40').value = t.resBe40;
             document.getElementById('form-res-be1r').value = t.resBe1r;
-            document.getElementById('form-violation').value = t.violation;
+            const violationSelect = document.getElementById('form-violation');
+            const violationValues = getViolationValues(t.violation);
+            Array.from(violationSelect.options).forEach(option => {
+                option.selected = violationValues.includes(option.value);
+            });
+            normalizeViolationSelection(violationSelect);
             document.getElementById('form-screenshot').value = t.screenshot || '';
             document.getElementById('form-notes').value = t.notes || '';
 
@@ -1716,7 +1747,7 @@
                         <td class="py-2.5 px-2.5 text-right font-mono ${rColor}">${isExec ? (t.resStd >= 0 ? '+' : '') + t.resStd.toFixed(2) + 'R (' + t.exitReason + ')' : '-'}</td>
                         <td class="py-2.5 px-2.5 text-right font-mono text-zinc-400">${isExec ? `${t.resNoBe.toFixed(1)} / ${t.resBe40.toFixed(1)} / ${t.resBe1r.toFixed(1)}` : '-'}</td>
                         <td class="py-2.5 px-2.5">
-                            <span class="px-2 py-0.5 rounded font-mono text-[11px] ${t.violation === 'Ja' ? 'bg-rose-500/20 text-rose-300' : 'bg-zinc-800 text-zinc-400'}">${t.violation}</span>
+                            <span class="px-2 py-0.5 rounded font-mono text-[11px] ${getViolationValues(t.violation).includes('Nein') ? 'bg-zinc-800 text-zinc-400' : 'bg-rose-500/20 text-rose-300'}">${getViolationValues(t.violation).join('; ')}</span>
                         </td>
                         <td class="py-2.5 px-2.5 text-right">
                             <div class="inline-flex items-center gap-1">
@@ -1896,7 +1927,7 @@
                 t.date, t.pair, t.session, t.status, t.skipReason, t.biasEma, t.biasStruct, t.direction,
                 t.dailyAtr, t.rangePips, t.sweepType, t.sweepDepth, t.m15Atr, t.m5Confirm, t.entryMethod,
                 t.slPips, t.spreadPips, t.plannedRrr, t.riskPct, t.resStd, t.exitReason,
-                t.resNoBe, t.resBe40, t.resBe1r, t.violation, `"${(t.notes || '').replace(/"/g, '""')}"`
+                t.resNoBe, t.resBe40, t.resBe1r, getViolationValues(t.violation).join(', '), `"${(t.notes || '').replace(/"/g, '""')}"`
             ]);
             const csv = [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
